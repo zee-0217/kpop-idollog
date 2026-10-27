@@ -1,4 +1,5 @@
-import { tags, artists, catalog, recommend } from './catalog.js';
+import { tags, tagGroups, artists, catalog, recommend, libraryStats, itunesArtistIds } from './catalog.js';
+import {newsCalendar,newsVerifiedAt} from './news-data.js';
 import { metadata } from './metadata.js';
 import { artistIds } from './artist-ids.js';
 
@@ -36,7 +37,7 @@ async function external(url) {
   if (!response.ok) throw new Error(`External API HTTP ${response.status}`);
   return response.json();
 }
-export async function calendar(month) {
+async function musicCalendar(month) {
   return cached(`month:${month}`, 30 * 60 * 1000, async () => {
     const last = new Date(Date.UTC(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)).getUTCDate();
     const query = `(${Object.values(artistIds).map(id => `arid:${id}`).join(' OR ')}) AND firstreleasedate:[${month}-01 TO ${month}-${last}]`;
@@ -62,13 +63,26 @@ export async function calendar(month) {
     return {events:found.sort((a,b) => a.date.localeCompare(b.date)), source:'MusicBrainz', partial:total > 1000, trackedArtists:Object.keys(artistIds).length};
   });
 }
+export async function calendar(month) {
+  const news=newsCalendar(month);
+  try{
+    const live=await musicCalendar(month);
+    const clean=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+    const extra=live.events.filter(item=>!news.some(event=>clean(event.artist)===clean(item.artist)&&(event.date===item.date||clean(event.title).includes(clean(item.title)))));
+    return {...live,events:[...news,...extra.map(event=>({...event,origin:'database'}))].sort((a,b)=>a.date.localeCompare(b.date)),newsCount:news.length,newsVerifiedAt,source:'기사·공식 공지 + MusicBrainz'};
+  }catch(error){
+    if(!news.length)throw error;
+    return {events:news,newsCount:news.length,newsVerifiedAt,source:'기사·공식 공지',trackedArtists:Object.keys(artistIds).length,updatedAt:new Date().toISOString(),stale:true,warning:'음악 DB 연결 지연 · 확인된 뉴스 일정은 표시 중'};
+  }
+}
 export async function artistTracks(name) {
   return cached(`artist:${name}`, 24 * 60 * 60 * 1000, async () => {
-    const url = new URL('https://itunes.apple.com/search');
-    url.search = new URLSearchParams({term:name, country:'US', media:'music', entity:'song', attribute:'artistTerm', limit:'200'});
+    const artistId=itunesArtistIds[name];
+    const url = new URL(artistId?'https://itunes.apple.com/lookup':'https://itunes.apple.com/search');
+    url.search = new URLSearchParams({country:'US',media:'music',entity:'song',limit:'200',...(artistId?{id:artistId}:{term:name,attribute:'artistTerm'})});
     const data = await scheduled('itunes', 3100, () => external(url));
     if (!Array.isArray(data.results)) throw new Error('Invalid iTunes response');
-    const tracks = data.results.filter(t => normalize(t.artistName || '') === normalize(name)).map(t => ({
+    const tracks = data.results.filter(t => t.kind==='song'&&(artistId?String(t.artistId)===String(artistId):normalize(t.artistName || '')===normalize(name))).map(t => ({
       title:t.trackName, artist:t.artistName, album:t.collectionName, date:t.releaseDate?.slice(0,10),
       artwork:t.artworkUrl100, preview:t.previewUrl, url:t.trackViewUrl, duration:t.trackTimeMillis
     }));
@@ -80,18 +94,21 @@ export async function handleApi(request) {
   if (request.method !== 'GET') return json({error:'GET 요청만 지원합니다.'},405);
   try {
     if (url.pathname === '/api/health') return json({ok:true});
-    if (url.pathname === '/api/tags') return json({tags, total:catalog.length});
+    if (url.pathname === '/api/tags') return json({tags,groups:tagGroups,...libraryStats,counts:Object.fromEntries(tags.map(tag=>[tag,recommend([tag]).length]))});
     if (url.pathname === '/api/recommendations') {
-      const selected = [...new Set((url.searchParams.get('tags') || '').split(',').filter(Boolean))];
-      if (selected.some(tag => !tags.includes(tag))) return json({error:'지원하지 않는 해시태그입니다.'},400);
-      const songs = recommend(selected).map(song => {
-        const tracks = metadata.artists[song.artist] || [], title = normalize(song.title);
-        const track = tracks.find(t => normalize(t.title) === title) || tracks.find(t => normalize(t.title).endsWith(title) && !/(remix|live|instrumental|japanese|english|spedup|slowed)/i.test(t.title));
-        return {...song, ...(track || {}), title:song.title, artist:song.artist};
-      });
-      // Interleave artists for discovery while keeping order deterministic.
-      songs.sort((a,b) => Number(a.id.split('-')[1]) - Number(b.id.split('-')[1]) || Number(a.id.split('-')[0]) - Number(b.id.split('-')[0]));
-      return json({songs, total:songs.length, selected, enough:songs.length >= 10, tagSource:'직접 분류한 분위기 태그', metadataSource:'iTunes Search API', metadataUpdatedAt:metadata.updatedAt});
+      const selected=[...new Set((url.searchParams.get('tags')||'').split(',').filter(Boolean))];
+      const year=url.searchParams.get('year')||'all',sort=url.searchParams.get('sort')||'latest';
+      const offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||20);
+      if(selected.some(tag=>!tags.includes(tag))||!['all','recent','2025','2026'].includes(year)||!['latest','title','artist'].includes(sort)||!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>100)return json({error:'태그, 연도, 정렬 또는 페이지 값이 올바르지 않습니다.'},400);
+      const matching=recommend(selected,{year,q:(url.searchParams.get('q')||'').slice(0,150)});
+      if(sort==='latest')matching.sort((a,b)=>b.date.localeCompare(a.date)||a.artist.localeCompare(b.artist));
+      else matching.sort((a,b)=>a[sort].localeCompare(b[sort],'ko')||b.date.localeCompare(a.date));
+      return json({songs:matching.slice(offset,offset+limit),total:matching.length,offset,limit,hasMore:offset+limit<matching.length,selected,enough:matching.length>=10,year,tagSource:'직접 분류 및 제목·장르·아티스트 기반 자동 추정',metadataSource:'iTunes Search API',metadataUpdatedAt:libraryStats.updatedAt});
+    }
+    if(url.pathname==='/api/news'){
+      const month=url.searchParams.get('month')||'';
+      if(!/^(20\d{2})-(0[1-9]|1[0-2])$/.test(month))return json({error:'month는 YYYY-MM 형식이어야 합니다.'},400);
+      return json({events:newsCalendar(month),source:'기사·공식 공지',verifiedAt:newsVerifiedAt});
     }
     if (url.pathname === '/api/calendar') {
       const month = url.searchParams.get('month') || '';

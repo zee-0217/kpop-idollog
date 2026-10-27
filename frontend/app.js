@@ -3,7 +3,8 @@ const icons = {'몽환':'☾','청량':'❋','달달':'♡','컨셉':'✦','댄�
 const colors = ['#e4d6c9','#cddfdb','#e6c5cd','#e8dfb4','#cdd6d0','#d8cfc6','#edcdb8'];
 const today = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());
 let month = today.slice(0,7), selectedDate = today, events = [], calendarData = null, calendarError = false;
-let availableTags = [], selectedTags = new Set(['몽환','댄스']), songs = [], visibleCount = 10;
+let tagGroups = [], tagCounts = {}, selectedTags = new Set(), songs = [], hasMore = false, totalSongs = 0;
+let searchTimer, loadingMore = false, calendarLoading = true;
 let calendarRequest = 0, recommendationRequest = 0, toastTimer;
 const refreshedArtists = new Map();
 let artistSlots = 0;
@@ -45,48 +46,86 @@ function renderCalendar() {
 }
 function renderDay() {
   $('#day-title').textContent=dateLabel(selectedDate);
-  const matches=events.filter(e=>e.date===selectedDate), container=$('#day-events');container.replaceChildren();
-  $('#day-subtitle').textContent=calendarError?'발매 정보를 확인할 수 없어요':matches.length ? `${matches.length}개의 새로운 음악이 기다려요`:'나의 다음 최애를 기다리는 날';
-  if(!matches.length){const box=document.createElement('div');box.className='day-empty';box.append(text('span',calendarError?'↻':'♧'),text('h4',calendarError?'잠시 연결이 쉬고 있어요':'아직 등록된 발매가 없어요'),text('p',calendarError?'아래의 다시 불러오기를 눌러주세요.':'예정 정보는 등록 후 표시돼요.\n그동안 새로운 취향을 만나볼까요?'));container.append(box);return;}
-  for(const event of matches){const card=document.createElement('article');card.className='day-release';card.append(text('span',`${event.date>today?'UPCOMING · ':''}${event.type.toUpperCase()}`),text('h4',event.artist),text('p',event.title));addLink(card,'발매 정보 확인 ↗',event.url);container.append(card);}
+  const matches=events.filter(event=>event.date===selectedDate),container=$('#day-events');container.replaceChildren();
+  $('#day-subtitle').textContent=calendarLoading?'확인된 소식을 모으는 중이에요':calendarError?'발매 정보를 확인할 수 없어요':matches.length?matches.length+'개의 새로운 소식':'나의 다음 최애를 기다리는 날';
+  if(!matches.length){const box=document.createElement('div');box.className='day-empty';box.append(text('span',calendarLoading?'♫':calendarError?'↻':'♧'),text('h4',calendarLoading?'컴백 소식을 불러오는 중':calendarError?'잠시 연결이 쉬고 있어요':'아직 등록된 소식이 없어요'),text('p',calendarError?'아래 다시 불러오기를 눌러주세요.':'달력에 표시된 날짜를 눌러 확인해 보세요.'));container.append(box);return;}
+  for(const event of matches){
+    const card=document.createElement('article');card.className='day-release';
+    card.append(text('span',(event.date>today?'예정 · ':'')+(event.origin==='news'?'뉴스 확인':'음악 DB')),text('h4',event.artist),text('p',event.title));
+    if(event.sources){for(const source of event.sources)addLink(card,source.name+' 원문 ↗',source.url,'event-source');card.append(text('small','확인일 '+event.verifiedAt,'event-verified'));}
+    else addLink(card,'MusicBrainz 발매 정보 ↗',event.url,'event-source');
+    container.append(card);
+  }
 }
-async function loadCalendar() {
-  const id=++calendarRequest;events=[];calendarData=null;calendarError=false;renderCalendar();renderDay();
-  $('#calendar-status').textContent='MusicBrainz에서 발매 정보를 불러오는 중이에요…';$('#retry-calendar').hidden=true;
-  try {const data=await api(`/api/calendar?month=${month}`);if(id!==calendarRequest)return;calendarData=data;events=data.events;renderCalendar();renderDay();
-    $('#calendar-status').textContent=`${data.trackedArtists}팀 조회 · ${events.length}건 등록 · ${data.stale?'이전 조회 결과':new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit'}).format(new Date(data.updatedAt))+' 확인'}${data.partial?' · 일부 결과만 표시':''}${data.warning?' · '+data.warning:''}`;
+function renderMonthNews(){
+  const news=events.filter(event=>event.origin==='news');
+  $('#month-news-summary').textContent='이번 달 뉴스·공식 공지로 확인한 일정 '+news.length+'건';
+  $('#month-news-list').replaceChildren(...news.map(event=>{const item=document.createElement('article');item.append(text('time',event.date.slice(5).replace('-','.'),'news-date'),text('strong',event.artist),text('span',event.title));addLink(item,event.sources[0].name+' ↗',event.url);return item;}));
+}
+function applyCalendarEvents(next){events=next;calendarLoading=false;renderCalendar();renderDay();renderMonthNews();}
+async function loadCalendar(){
+  const id=++calendarRequest;events=[];calendarLoading=true;calendarError=false;renderCalendar();renderDay();renderMonthNews();
+  $('#calendar-status').textContent='기사와 공식 공지에서 확인한 일정을 불러오는 중이에요…';$('#retry-calendar').hidden=true;
+  try{
+    const news=await api('/api/news?month='+month);if(id!==calendarRequest)return;
+    applyCalendarEvents(news.events);
+    $('#calendar-status').textContent='뉴스·공식 공지 '+news.events.length+'건 · '+news.verifiedAt+' 확인 · 음악 DB 추가 조회 중';
+  }catch{}
+  try{
+    const data=await api('/api/calendar?month='+month);if(id!==calendarRequest)return;calendarData=data;applyCalendarEvents(data.events);
+    $('#calendar-status').textContent='총 '+events.length+'건 · 뉴스 확인 '+(data.newsCount||0)+'건 · '+data.source+(data.warning?' · '+data.warning:'');
     $('#retry-calendar').hidden=!data.stale;
-  } catch(error){if(id!==calendarRequest)return;calendarError=true;renderCalendar();renderDay();$('#calendar-status').textContent=error.message;$('#retry-calendar').hidden=false;}
+  }catch(error){
+    if(id!==calendarRequest)return;calendarLoading=false;calendarError=!events.length;renderCalendar();renderDay();
+    $('#calendar-status').textContent=events.length?'음악 DB 연결 지연 · 확인된 뉴스 '+events.length+'건 표시 중':error.message;$('#retry-calendar').hidden=false;
+  }
 }
 function changeMonth(delta) {const [year,number]=month.split('-').map(Number);month=new Date(Date.UTC(year,number-1+delta,1)).toISOString().slice(0,7);selectedDate=month===today.slice(0,7)?today:`${month}-01`;loadCalendar();}
 $('#prev-month').addEventListener('click',()=>changeMonth(-1));$('#next-month').addEventListener('click',()=>changeMonth(1));
 $('#today-button').addEventListener('click',()=>{month=today.slice(0,7);selectedDate=today;loadCalendar();});$('#retry-calendar').addEventListener('click',loadCalendar);
 
-function renderTags() {$('#tag-options').replaceChildren(...availableTags.map(tag=>{const button=document.createElement('button');button.type='button';button.className='tag-button';button.setAttribute('aria-pressed',String(selectedTags.has(tag)));button.append(text('span',icons[tag]||'✦'),text('b',`#${tag}`));if(selectedTags.has(tag))button.append(text('span','✓','check'));button.addEventListener('click',()=>{selectedTags.has(tag)?selectedTags.delete(tag):selectedTags.add(tag);renderTags();loadSongs();});return button;}));}
+function renderTags(){
+  $('#tag-options').replaceChildren(...tagGroups.map(group=>{
+    const field=document.createElement('fieldset');field.className='tag-group';
+    const legend=text('legend',group.icon+' '+group.label);field.append(legend);
+    const row=document.createElement('div');row.className='tag-row';
+    for(const tag of group.tags){const button=document.createElement('button');button.type='button';button.className='tag-button';button.setAttribute('aria-pressed',String(selectedTags.has(tag)));button.append(text('b','#'+tag),text('small',Number(tagCounts[tag]||0).toLocaleString('ko-KR')));if(selectedTags.has(tag))button.append(text('span','✓','check'));button.addEventListener('click',()=>{selectedTags.has(tag)?selectedTags.delete(tag):selectedTags.add(tag);renderTags();loadSongs();});row.append(button);}
+    field.append(row);return field;
+  }));
+}
 $('#clear-tags').addEventListener('click',()=>{selectedTags.clear();renderTags();loadSongs();});
 function matchTrack(song,tracks) {const title=normalize(song.title);return tracks.find(t=>normalize(t.title)===title)||tracks.find(t=>normalize(t.title).endsWith(title)&&!/(remix|live|instrumental|japanese|english|spedup|slowed)/i.test(t.title));}
 function songCard(song,index) {
   const card=document.createElement('article');card.className='song-card';card.dataset.songId=song.id;
-  const cover=document.createElement('div');cover.className='cover-wrap';cover.style.setProperty('--cover-bg',colors[Number(song.id.split('-')[0])%colors.length]);
+  const cover=document.createElement('div');cover.className='cover-wrap';cover.style.setProperty('--cover-bg',colors[Number(song.id.split('-').at(-1))%colors.length]);
   const fallback=document.createElement('div');fallback.className='cover-fallback';fallback.setAttribute('aria-hidden','true');fallback.append(text('span',icons[song.tags[0]]||'✦','cover-symbol'),text('b',song.title),text('small',song.artist));cover.append(fallback);
-  if(safeURL(song.artwork)){const img=document.createElement('img');img.className='cover-image';img.src=song.artwork;img.alt=`${song.album||song.title} 앨범 커버`;img.loading='lazy';img.addEventListener('error',()=>img.remove(),{once:true});cover.append(img);}
-  cover.append(text('span',String(index+1).padStart(2,'0'),'cover-number'));
+  if(safeURL(song.artwork)){const img=document.createElement('img');img.className='cover-image';img.src=safeURL(song.artwork).replace('/100x100bb.jpg','/400x400bb.jpg');img.alt=`${song.album||song.title} 앨범 커버`;img.loading='lazy';img.addEventListener('error',()=>img.remove(),{once:true});cover.append(img);}
+  cover.append(text('span',String(index+1).padStart(2,'0'),'cover-number'));if(song.date>='2025-01-01')cover.append(text('span',song.date.slice(0,4)+' NEW','new-release'));
   const play=text('button','▶','play-button');play.type='button';play.setAttribute('aria-label',`${song.artist} ${song.title} 미리듣기`);play.addEventListener('click',()=>playSong(song,play));cover.append(play);card.append(cover,text('h4',song.title),text('p',song.artist,'song-artist'));
-  const labels=document.createElement('div');labels.className='song-tags';song.tags.forEach(tag=>labels.append(text('span',`#${tag}`,selectedTags.has(tag)?'match':'')));card.append(labels);
+  const labels=document.createElement('div');labels.className='song-tags';const shown=[...new Set([...song.tags.filter(tag=>selectedTags.has(tag)),...song.tags])];shown.slice(0,5).forEach(tag=>labels.append(text('span','#'+tag,selectedTags.has(tag)?'match':'')));if(shown.length>5){const more=text('span','+'+(shown.length-5));more.title=shown.slice(5).map(tag=>'#'+tag).join(' ');labels.append(more);}card.append(labels);
   addLink(card,song.url?'Apple Music에서 듣기 ↗':'Apple Music에서 찾기 ↗',song.url||`https://music.apple.com/us/search?term=${encodeURIComponent(`${song.artist} ${song.title}`)}`,'song-link');
-  card.append(text('p',song.date?`${song.date} · iTunes`:'앨범 정보 조회 중','song-meta'));return card;
+  card.append(text('p',song.date?song.date+' · iTunes':'발매일 확인 중','song-meta'));const method=text('span',song.tagMethod==='curated'?'직접 분류':song.tagMethod==='mixed'?'직접 + 추천 분류':'추천 태그 · 추정','tag-method');method.title=song.tagMethod==='curated'?'편집자가 곡별로 분류한 태그입니다.':'제목·API 장르·아티스트 스타일을 바탕으로 추정했습니다. 음원 분석 결과가 아니며 실제 느낌과 다를 수 있습니다.';card.append(method);return card;
 }
-function renderSongs() {const sort=$('#sort-songs').value,ordered=[...songs];if(sort!=='discovery')ordered.sort((a,b)=>a[sort].localeCompare(b[sort],'ko'));$('#song-grid').replaceChildren(...ordered.slice(0,visibleCount).map(songCard));$('#load-more').hidden=visibleCount>=songs.length;hydrateArtists(ordered.slice(0,visibleCount));}
-async function loadSongs() {
-  const id=++recommendationRequest;visibleCount=10;$('#song-grid').replaceChildren(text('p','당신의 취향을 모으고 있어요…','loading-songs'));$('#load-more').hidden=true;$('#recommendation-message').hidden=true;
-  try {const data=await api(`/api/recommendations?tags=${encodeURIComponent([...selectedTags].join(','))}`);if(id!==recommendationRequest)return;songs=data.songs;$('#result-count').textContent=String(data.total);$('#recommendation-summary').textContent=selectedTags.size?`${[...selectedTags].map(t=>'#'+t).join(' + ')} · 모든 태그가 겹치는 ${data.total}곡`:`전체 큐레이션 ${data.total}곡에서 새로운 취향을 발견해 보세요.`;
-    if(!data.enough){$('#recommendation-message').textContent=data.total?`선택한 태그를 모두 포함하는 곡은 ${data.total}곡이에요. 태그를 줄이면 10곡 이상 만날 수 있어요.`:'아직 이 조합의 곡은 없어요. 태그 하나를 해제해 새로운 음악을 찾아보세요.';$('#recommendation-message').hidden=false;}renderSongs();
-  }catch(error){if(id!==recommendationRequest)return;$('#song-grid').replaceChildren();$('#result-count').textContent='—';$('#recommendation-summary').textContent='추천을 불러오지 못했어요.';$('#recommendation-message').replaceChildren(text('span',error.message+' '));const retry=text('button','다시 시도','text-button');retry.addEventListener('click',loadSongs);$('#recommendation-message').append(retry);$('#recommendation-message').hidden=false;}
+function renderSongs(){
+  $('#song-grid').replaceChildren(...songs.map(songCard));$('#load-more').hidden=!hasMore;
+  $('#load-more').disabled=loadingMore;
+}
+async function loadSongs(append=false){
+  const id=append?recommendationRequest:++recommendationRequest,offset=append?songs.length:0;
+  if(!append){songs=[];$('#song-grid').replaceChildren(text('p','당신의 취향을 모으고 있어요…','loading-songs'));$('#load-more').hidden=true;$('#recommendation-message').hidden=true;}
+  loadingMore=append;$('#load-more').disabled=true;
+  const params=new URLSearchParams({tags:[...selectedTags].join(','),year:$('#year-filter').value,q:$('#song-search').value,sort:$('#sort-songs').value,offset:String(offset),limit:'20'});
+  try{
+    const data=await api('/api/recommendations?'+params);if(id!==recommendationRequest)return;
+    songs=append?[...songs,...data.songs]:data.songs;hasMore=data.hasMore;totalSongs=data.total;
+    $('#result-count').textContent=data.total.toLocaleString('ko-KR');
+    $('#recommendation-summary').textContent=(selectedTags.size?[...selectedTags].map(tag=>'#'+tag).join(' + ')+' · 모든 태그 교집합':'새로운 음악부터 만나는 나의 라이브러리')+' · '+songs.length+' / '+data.total.toLocaleString('ko-KR')+'곡';
+    if(!data.enough){$('#recommendation-message').textContent=data.total?'이 조건에 맞는 곡은 '+data.total+'곡이에요. 태그나 연도 조건을 줄이면 더 많은 음악을 만날 수 있어요.':'이 조건에 맞는 곡이 없어요. 선택한 태그, 검색어 또는 연도 조건을 조정해 보세요.';$('#recommendation-message').hidden=false;}
+    loadingMore=false;renderSongs();
+  }catch(error){if(id!==recommendationRequest)return;loadingMore=false;$('#load-more').disabled=false;if(!append)$('#song-grid').replaceChildren();$('#recommendation-summary').textContent='추천을 불러오지 못했어요.';$('#recommendation-message').replaceChildren(text('span',error.message+' '));const retry=text('button','다시 시도','text-button');retry.addEventListener('click',()=>loadSongs(append));$('#recommendation-message').append(retry);$('#recommendation-message').hidden=false;}
 }
 function refreshArtist(artist) {if(!refreshedArtists.has(artist)){const job=queuedArtist(artist).catch(error=>{refreshedArtists.delete(artist);throw error;});refreshedArtists.set(artist,job);}return refreshedArtists.get(artist);}
-function hydrateArtists(visibleSongs) {
-  for(const artist of new Set(visibleSongs.filter(s=>!s.liveChecked).map(s=>s.artist))){const version=recommendationRequest;refreshArtist(artist).then(data=>{if(version!==recommendationRequest)return;let changed=false;for(const song of songs.filter(s=>s.artist===artist&&!s.liveChecked)){const found=matchTrack(song,data.tracks);if(found)Object.assign(song,found,{title:song.title,artist:song.artist});song.liveChecked=true;changed=true;}if(changed)renderSongs();}).catch(()=>{for(const card of $('#song-grid').children){const song=songs.find(s=>s.id===card.dataset.songId);if(song?.artist===artist&&!song.date)card.querySelector('.song-meta').textContent='앨범 정보 연결 지연 · 큐레이션';}});}
-}
+
 async function playSong(song,button) {
   button.disabled=true;
   try{if(!safeURL(song.preview)){const data=await refreshArtist(song.artist),found=matchTrack(song,data.tracks);if(found)Object.assign(song,found,{title:song.title});}
@@ -94,7 +133,11 @@ async function playSong(song,button) {
     $('#player-title').textContent=song.title;$('#player-artist').textContent=`${song.artist} · iTunes 미리듣기`;$('#audio').src=safeURL(song.preview);$('#player').hidden=false;await $('#audio').play();
   }catch{showToast('미리듣기를 불러오지 못했어요. 아래 Apple Music 링크를 이용해 주세요.');}finally{button.disabled=false;}
 }
-$('#sort-songs').addEventListener('change',renderSongs);$('#load-more').addEventListener('click',()=>{visibleCount+=10;renderSongs();});$('#close-player').addEventListener('click',()=>{$('#audio').pause();$('#audio').removeAttribute('src');$('#audio').load();$('#player').hidden=true;});
+$('#sort-songs').addEventListener('change',()=>loadSongs());$('#year-filter').addEventListener('change',()=>loadSongs());$('#song-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadSongs(),250);});$('#load-more').addEventListener('click',()=>{if(!loadingMore)loadSongs(true);});$('#close-player').addEventListener('click',()=>{$('#audio').pause();$('#audio').removeAttribute('src');$('#audio').load();$('#player').hidden=true;});
 $('#audio').addEventListener('error',()=>showToast('미리듣기 파일을 재생하지 못했어요. Apple Music에서 확인해 주세요.'));
-async function init(){loadCalendar();try{const data=await api('/api/tags');availableTags=data.tags;renderTags();loadSongs();}catch(error){$('#recommendation-summary').textContent=error.message;const retry=text('button','다시 불러오기','text-button');retry.addEventListener('click',()=>{retry.remove();init();});$('#tag-options').append(retry);}}
+async function init(){
+  loadCalendar();
+  try{const data=await api('/api/tags');tagGroups=data.groups;tagCounts=data.counts;renderTags();$('#library-total').textContent=data.total.toLocaleString('ko-KR')+'곡 · '+data.artists+'팀의 K-pop 라이브러리';$('#library-recent').textContent='2025–2026 발매 '+data.recent.toLocaleString('ko-KR')+'곡 / 2026년 '+data.year2026.toLocaleString('ko-KR')+'곡';loadSongs();}
+  catch(error){$('#recommendation-summary').textContent=error.message;const retry=text('button','다시 불러오기','text-button');retry.addEventListener('click',()=>{retry.remove();init();});$('#tag-options').append(retry);}
+}
 init();
