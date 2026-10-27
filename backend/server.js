@@ -2,7 +2,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {handleApi} from './api.js';
 
-const files = {'/':['index.html','text/html; charset=utf-8'], '/styles.css':['styles.css','text/css; charset=utf-8'], '/app.js':['app.js','text/javascript; charset=utf-8']};
+const files = {'/':['index.html','text/html; charset=utf-8'], '/styles.css':['styles.css','text/css; charset=utf-8'], '/brand.css':['brand.css','text/css; charset=utf-8'], '/app.js':['app.js','text/javascript; charset=utf-8']};
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
@@ -19,5 +19,5 @@ const server = http.createServer(async (req,res) => {
   } catch {res.writeHead(500); res.end('Server error');}
 });
 const port = Number(process.env.PORT || 3000);
-server.listen(port, '127.0.0.1', () => console.log(`Comeback Club: http://localhost:${port}`));
+server.listen(port, '127.0.0.1', () => console.log(`Idollog (#idollog): http://localhost:${port}`));
 server.on('error', error => {console.error(error.code === 'EADDRINUSE' ? `포트 ${port}가 사용 중입니다. PORT 환경변수를 변경하세요.` : error.message); process.exitCode = 1;});

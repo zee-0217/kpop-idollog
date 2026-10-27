@@ -33,7 +33,7 @@ async function cached(key, ttl, task) {
   return job;
 }
 async function external(url) {
-  const response = await fetch(url, {headers:{'User-Agent':'ComebackClub/1.0 (K-pop release calendar; local educational project)', Accept:'application/json'}, signal:AbortSignal.timeout(12000)});
+  const response = await fetch(url, {headers:{'User-Agent':'Idollog/1.0 (K-pop release calendar; local educational project)', Accept:'application/json'}, signal:AbortSignal.timeout(12000)});
   if (!response.ok) throw new Error(`External API HTTP ${response.status}`);
   return response.json();
 }

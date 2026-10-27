@@ -1,4 +1,4 @@
-﻿# COMEBACK CLUB
+﻿# 아이돌로그 (#idollog)
 
 HTML, CSS, 브라우저 JavaScript와 Node.js 기본 모듈로 만든 K-pop 컴백 달력 및 음악 추천 앱입니다. 프레임워크, npm 의존성 설치, API 키, 데이터베이스가 필요 없습니다.
 
@@ -71,7 +71,8 @@ node backend/server.js
 ```text
 frontend/
   index.html            화면 구조
-  styles.css            반응형 스타일
+  styles.css            기본 레이아웃 및 반응형 스타일
+  brand.css             아이돌로그 파스텔 테마·포토카드·배지 스타일
   app.js                달력, 세 분류 태그, 검색, 연도, 페이지, 플레이어
 backend/
   server.js             Node HTTP 서버 및 정적 파일 제공
