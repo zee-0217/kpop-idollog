@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#fffaf5">
+  <meta name="description" content="기다리는 컴백부터 오늘의 취향까지. K-pop 컴백 달력과 해시태그 음악 추천.">
+  <title>COMEBACK CLUB — 좋아하는 음악이 모이는 곳</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#calendar">본문으로 건너뛰기</a>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="컴백 클럽 홈"><span class="brand-icon">✳</span><span>COMEBACK<span class="brand-second">CLUB<span class="brand-dot">●</span></span></span></a>
+    <nav aria-label="주 메뉴"><a class="nav-active" href="#calendar">컴백 캘린더</a><a href="#discover">취향 음악 찾기 <span>↗</span></a></nav>
+    <span class="header-note"><span class="live-dot"></span> 매일이 덕질하기 좋은 날</span>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy"><div class="eyebrow"><span></span> YOUR NEXT FAVORITE IS HERE</div><h1 id="hero-title">기다리던 컴백,<br>발견하는 <span>내 취향.</span><svg viewBox="0 0 340 16" aria-hidden="true"><path d="M4 10 Q170 -3 334 8 M24 15 Q180 3 307 12"/></svg></h1><p>최애의 새로운 시작을 달력에 담고,<br>오늘의 기분에 딱 맞는 K-pop을 만나보세요.</p><a class="primary-link" href="#discover">오늘의 음악 발견하기 <span>↗</span></a><div class="hero-caption">FOR THE MUSIC. FOR THE FANDOM. FOR YOU.</div></div>
+      <div class="hero-art" aria-hidden="true"><span class="art-star star-one">✦</span><span class="art-star star-two">✧</span><span class="art-orbit"></span><div class="vinyl"><div class="vinyl-label"><span>COMEBACK CLUB</span><b>좋아하는 마음을<br>계속 재생 중</b><i></i><small>SIDE A · YOUR FAVORITES</small></div></div><div class="music-note">♪</div><div class="art-ticket"><span>ALL ACCESS PASS</span><b>나의 취향,<br>무한 재생 ♡</b><small>MEMBER NO. 001 ─────</small></div><div class="art-sticker">NEW<br><b>FAVORITE</b><br>ON REPEAT</div></div>
+    </section>
+
+    <section id="calendar" class="calendar-section" aria-labelledby="calendar-title">
+      <div class="section-heading"><div><div class="eyebrow muted">MARK YOUR CALENDAR</div><h2 id="calendar-title">이번 달, 설레는 컴백 <span class="small-spark">✦</span></h2><p>새로운 음악을 만나는 날, 놓치지 않도록.</p></div><span class="source-pill"><span class="live-dot"></span> MusicBrainz 발매 정보</span></div>
+      <div class="calendar-layout">
+        <div class="calendar-card"><div class="calendar-toolbar"><div class="month-label"><h3 id="month-label"></h3><span id="month-english"></span></div><div class="month-controls"><button id="prev-month" class="icon-button" aria-label="이전 달">‹</button><button id="today-button" class="today-button">이번 달</button><button id="next-month" class="icon-button" aria-label="다음 달">›</button></div></div><div class="weekdays" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div id="calendar-grid" class="calendar-grid" aria-label="월간 컴백 달력"></div><div class="calendar-legend"><span><i class="legend-today"></i> 오늘</span><span><i class="legend-release"></i> 발매 일정</span><span>날짜를 눌러 자세히 보기</span></div></div>
+        <aside class="day-panel" aria-labelledby="day-title"><div class="panel-topline"><span>ON THE RECORD</span><span>✦</span></div><h3 id="day-title"></h3><p id="day-subtitle"></p><div id="day-events" aria-live="polite"></div><div class="panel-bottom">기다리는 순간도 플레이리스트의 일부 ♡</div></aside>
+      </div>
+      <div class="data-status"><p id="calendar-status" role="status">발매 정보를 불러오는 중입니다…</p><button id="retry-calendar" class="text-button" hidden>다시 불러오기 ↻</button></div>
+      <p class="data-note">등록된 아티스트의 앨범·EP·싱글 최초 발매일 기준입니다. 커뮤니티 데이터 특성상 미등록 컴백이나 예정 일정이 누락될 수 있습니다.</p>
+    </section>
+
+    <section id="discover" class="discover-section" aria-labelledby="discover-title"><div class="section-heading"><div><div class="eyebrow muted">FIND YOUR OWN SOUND</div><h2 id="discover-title">오늘의 기분은, 어떤 음악? <span class="small-spark">♫</span></h2><p>좋아하는 해시태그를 골라보세요. 취향이 겹칠수록 더 가까워져요.</p></div><div class="mixtape-label">MADE FOR<br><b>YOUR MOOD ♡</b></div></div>
+      <div class="filter-card"><div class="filter-heading"><span>MY MOOD MIX</span><button id="clear-tags" class="text-button">선택 초기화 ↻</button></div><div id="tag-options" class="tag-options" aria-label="추천 해시태그"></div><div class="filter-bottom"><p><span class="filter-dot"></span> 선택한 태그를 <strong>모두 포함하는</strong> 곡을 찾아요</p><span>여러 개 선택 가능</span></div></div>
+      <div class="results-toolbar"><div><h3>당신을 위한 플레이리스트 <span id="result-count">—</span></h3><p id="recommendation-summary" role="status">취향을 모으고 있어요…</p></div><label class="sort-label">정렬 <select id="sort-songs" aria-label="추천곡 정렬"><option value="discovery">발견순</option><option value="title">곡 제목순</option><option value="artist">아티스트순</option></select></label></div>
+      <div id="recommendation-message" class="recommendation-message" hidden></div><div id="song-grid" class="song-grid" aria-live="polite"></div><button id="load-more" class="load-more" hidden>더 많은 음악 만나기 <span>＋</span></button>
+      <p class="recommendation-note">분위기 태그는 직접 분류한 큐레이션입니다. 앨범·발매일·미리듣기는 iTunes에서 조회하며, 제공 여부는 곡과 지역에 따라 다릅니다.</p>
+    </section>
+    <section class="closing-note"><span>✳</span><p>좋아하는 음악이 있다는 건,<br><b>기다릴 내일이 있다는 것.</b></p><span>♡</span></section>
+  </main>
+  <footer><a class="footer-brand" href="#">COMEBACK CLUB<span>●</span></a><p>A LITTLE SPACE FOR YOUR BIG LOVE OF K-POP.</p><div><a href="https://musicbrainz.org" target="_blank" rel="noopener noreferrer">MusicBrainz ↗</a><a href="https://www.apple.com/itunes/" target="_blank" rel="noopener noreferrer">iTunes ↗</a></div></footer>
+  <div id="player" class="player" hidden><div><strong id="player-title"></strong><span id="player-artist"></span></div><audio id="audio" controls preload="none"></audio><button id="close-player" class="icon-button" aria-label="미리듣기 닫기">×</button></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

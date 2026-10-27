@@ -1,0 +1,1 @@
+{"name":"comeback-club","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node backend/server.js","test":"node --test tests/*.test.js","build":"node scripts/build.mjs"},"engines":{"node":">=22"}}
