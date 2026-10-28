@@ -1,7 +1,9 @@
 import {discoveryOrder} from './discovery.js';
+import {auditedMVs} from './mv-data.js';
+import {mvArtistName,mvVersion,mvTitleKeys,mvSongKeys} from './mv-matching.js';
 // Official uploads verified against their original YouTube pages.
 // A video ID is embedded only for a known artist/title pair, never guessed.
-export const officialMVs=[
+const manuallyVerifiedMVs=[
   {artist:'Jung Kook',title:'Seven',id:'QU9c0053UAU',channel:'HYBE LABELS'},
   {artist:'Jung Kook',title:'Standing Next to You',id:'UNo0TG9LwwI',channel:'HYBE LABELS'},
   {artist:'NAYEON',title:'POP!',id:'f6YDKF0LVWw',channel:'JYP Entertainment'},
@@ -13,9 +15,21 @@ export const officialMVs=[
   {artist:'IVE',title:'LOVE DIVE',id:'Y8JFxS1HlDo',channel:'starshipTV'}
 ];
 const mediaNormalize=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+export const officialMVs=[...manuallyVerifiedMVs,...auditedMVs];
+const videoLookup=new Map();
+for(const video of officialMVs){
+  const artist=mediaNormalize(mvArtistName(video.artist)),version=video.version||mvVersion(video.title);
+  for(const title of [video.title,...(video.aliases||[])])for(const key of mvTitleKeys(title)){
+    const lookup=artist+'|'+version+'|'+key;if(!videoLookup.has(lookup))videoLookup.set(lookup,video);
+  }
+}
+const matchedVideoCache=new Map();
 export function officialVideo(song){
-  const artist=mediaNormalize(song.artist),title=mediaNormalize(song.title.replace(/\s*\((?:feat\.|clean|explicit)[^)]*\)/gi,''));
-  return officialMVs.find(video=>mediaNormalize(video.artist)===artist&&mediaNormalize(video.title)===title)||null;
+  const cacheKey=song.artist+'|'+song.title;if(matchedVideoCache.has(cacheKey))return matchedVideoCache.get(cacheKey);
+  const artist=mediaNormalize(mvArtistName(song.artist)),version=mvVersion(song.title);
+  let result=null;
+  for(const key of mvSongKeys(song)){const candidate=videoLookup.get(artist+'|'+version+'|'+key);if(candidate){result=candidate;break;}}
+  matchedVideoCache.set(cacheKey,result);return result;
 }
 export function listeningLinks(song){
   const query=`${song.artist} ${song.title}`;

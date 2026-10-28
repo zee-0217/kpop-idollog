@@ -8,9 +8,41 @@ import {libraryData} from '../backend/library-data.js';
 import {artistAliases} from '../backend/search-aliases.js';
 import {koreaCurrentYear,coverKey,discoveryOrder} from '../backend/discovery.js';
 import {officialVideo,listeningLinks,heroPhotos} from '../backend/media.js';
+import {mvMatchesSong,parseOfficialMVTitle} from '../backend/mv-matching.js';
+import {auditedMVs} from '../backend/mv-data.js';
 const request=(path,method='GET')=>handleApi(new Request('https://example.test'+path,{method}));
 const data=async path=>(await request(path)).json();
 const norm=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+
+test('reported missing MVs and broad official channel coverage reach recommendation cards',async()=>{
+  for(const [artist,title,id] of [['Hearts2Hearts','Lemon Tang','1VqxWNwgf5Q'],['RESCENE','LOVE ATTACK','9XttLI0oH0I'],['BTS','DNA','MBdVXkSdhwU']]){
+    assert.equal(officialVideo({artist,title})?.id,id);
+    const response=await data('/api/recommendations?'+new URLSearchParams({year:'all',q:artist+' '+title,limit:'100'}));
+    assert.ok(response.songs.some(song=>song.video?.id===id),artist+' '+title);
+  }
+  assert.ok(catalog.filter(song=>officialVideo(song)).length>=1000);
+  for(const video of auditedMVs){assert.match(video.channelId,/^UC[a-zA-Z0-9_-]{22}$/);assert.equal(video.sourceUrl,'https://www.youtube.com/watch?v='+video.id);assert.ok(video.sourceTitle);}
+});
+
+test('MV matching accepts title translations and credits but separates versions and similar titles',()=>{
+  const video={artist:'Jung Kook',title:'Seven'};
+  assert.ok(mvMatchesSong(video,{artist:'정국',title:'Seven (feat. Latto) (Clean Ver.)'}));
+  assert.ok(mvMatchesSong({artist:'NMIXX',title:'긴 소원 (Birthday Wish)'},{artist:'NMIXX',title:'Birthday Wish'}));
+  for(const title of ['Seven (Japanese Ver.)','Seven (English Version)','Seven (Alesso Remix)','Seven (Acoustic Version)'])assert.equal(mvMatchesSong(video,{artist:'Jung Kook',title}),false,title);
+  assert.equal(mvMatchesSong({artist:'Red Velvet',title:'Bad Boy'},{artist:'Red Velvet',title:'Really Bad Boy'}),false);
+  assert.equal(mvMatchesSong(video,{artist:'BTS',title:'Seven'}),false);
+});
+
+test('official MV title parsing excludes teasers, behind scenes and performance uploads',()=>{
+  assert.equal(parseOfficialMVTitle("Hearts2Hearts 하츠투하츠 'Lemon Tang' MV").title,'Lemon Tang');
+  assert.equal(parseOfficialMVTitle('RESCENE (리센느) ‘LOVE ATTACK’ Official MV').title,'LOVE ATTACK');
+  assert.equal(parseOfficialMVTitle("[MV] BTS - DNA").title,'DNA');
+  for(const suffix of ['Teaser','Behind The Scenes','Dance Practice','Performance Video','Lyric Video','Reaction'])assert.equal(parseOfficialMVTitle("BTS 'DNA' Official MV "+suffix),null,suffix);
+  assert.equal(parseOfficialMVTitle("BTS 'DNA' Dance Practice"),null);
+  assert.equal(parseOfficialMVTitle('CNBLUE (씨엔블루) - 싹둑 (Love Cut) MV TEASER'),null);
+  assert.equal(parseOfficialMVTitle("BLACKPINK - '불장난 (PLAYING WITH FIRE)’ M/V BEHIND THE SCENES"),null);
+  assert.equal(parseOfficialMVTitle('JENNIE - Mantra (Official MV Behind The Scenes)'),null);
+});
 
 test('catalog contains 1000+ genuine songs, recent releases, and unique identities',()=>{
   assert.ok(catalog.length>=1000);assert.ok(libraryStats.year2025>=100);assert.ok(libraryStats.year2026>=100);

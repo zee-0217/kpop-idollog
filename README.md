@@ -83,7 +83,9 @@ backend/
   catalog.js             라이브러리 결합, 태그 검색, 통계
   search-aliases.js       등록 아티스트의 한글·영문 이름, 약칭, 일부 곡 별칭
   discovery.js            한국 기준 현재 연도, 커버 다양성을 고려한 랜덤 정렬
-  media.js                확인한 공식 MV, 음악 채널 링크, 상단 포토카드 후보
+  media.js                공식 MV 연결, 음악 채널 링크, 상단 포토카드 후보
+  mv-data.js              공식 채널 영상 메타데이터와 확인 출처
+  mv-matching.js          한영 제목·크레딧 매칭 및 언어·리믹스 버전 구분
   metadata.js            기존 iTunes 메타데이터 캐시
   news-data.js           확인된 기사 일정, 출처, 확인일
   artist-ids.js          MusicBrainz 고유 ID
@@ -144,9 +146,20 @@ node scripts/validate-artifact.mjs
 - 달력의 A2O SOUL, A2O LITE, AND2BLE, 정한·조슈아 유닛, 성한빈, 리센느 등의 곡도 포함합니다. A2O의 공동 크레딧과 유닛 앨범 표기를 별도로 처리합니다.
 - 첫 화면은 기존처럼 올해 곡을 추천합니다. 연도를 직접 선택하기 전에 검색어를 입력하면 전체 연도로 전환하여, 올해 발매곡이 없는 솔로 가수의 기존 곡도 찾을 수 있게 합니다. 직접 선택한 연도는 유지합니다.
 - 모든 곡에 YouTube MV 검색, YouTube Music 검색, Spotify 검색 링크를 제공합니다. 이들은 검색 결과 링크이며 곡을 자동으로 확정하거나 전체 무료 재생을 보장하는 링크가 아닙니다.
-- 확인한 공식 MV는 카드의 '공식 MV 보기'로 앱 안에서 재생합니다. 현재는 정국 Seven/Standing Next to You, 나연 POP!/ABCD, aespa Whiplash/Supernova, BTS Dynamite/Butter, IVE LOVE DIVE 등 직접 확인한 원본 영상 ID를 등록했습니다.
+- 확인한 공식 MV는 카드의 '공식 MV 보기'로 앱 안에서 재생합니다. 공식 채널의 공개 영상 메타데이터를 대조해 1,000곡 이상에 연결했습니다. Hearts2Hearts Lemon Tang, RESCENE LOVE ATTACK, BTS DNA도 포함합니다. 한영 병기 제목·피처링·Clean 표기를 처리하고 다른 언어 버전이나 리믹스는 별도로 구분합니다. 티저·비하인드·안무 영상은 제외합니다.
 - 공식 영상은 YouTube의 iframe으로 표시하고 다운로드하거나 음원을 추출하지 않습니다. 영상은 사용자가 버튼을 누른 후에만 불러옵니다. 닫기/ESC로 창을 닫으면 iframe을 제거해 재생을 중지합니다. 임베딩이 제한된 영상은 YouTube 원문 링크에서 확인할 수 있습니다.
-- API 키 없는 상태에서는 모든 곡의 공식 MV를 자동 검색해 임베드하지 않습니다. YouTube Data API의 자동 검색에는 인증 정보가 필요하고, 과거 iframe 검색 매개변수는 폐지되었습니다. 미등록 곡에는 정확히 'MV 검색'이라고 표시합니다.
+- 실행 중에는 외부 검색 API 없이 포함된 공식 영상 목록을 사용합니다. 미등록 곡에는 'MV 검색' 링크를 유지합니다. 모든 곡에 공식 MV가 있거나 임베딩이 허용되는 것은 아닙니다.
+
+공식 영상 목록을 갱신할 때만 Python과 선택 개발 도구 yt-dlp가 필요합니다. 일반 실행에는 필요 없습니다. 공식 채널의 공개 메타데이터만 읽으며 영상·음원을 내려받지 않습니다.
+
+```powershell
+python -m pip install yt-dlp
+node scripts/refresh-official-mvs.mjs
+node scripts/import-official-mvs.mjs
+node --test tests/api.test.js
+```
+
+첫 명령은 선택 개발 도구 설치입니다. 채널별 갱신에는 수 분이 걸릴 수 있습니다. `.sites-runtime/mv-channel-*.json`의 확인된 채널 ID·확인일·영상 제목/ID를 대조하여 `backend/mv-data.js`를 생성합니다. 생성 후 새 영상의 원문과 아티스트 일치 여부를 검토하세요. API 키는 사용하지 않습니다.
 
 공식 문서:
 - https://developers.google.com/youtube/registering_an_application
