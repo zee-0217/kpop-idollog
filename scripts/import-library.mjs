@@ -1,15 +1,17 @@
 // Real iTunes metadata only. Requests are serialized and resumable.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {metadata} from '../backend/metadata.js';
+import {newsEvents} from '../backend/news-data.js';
 const asOf=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());
 const normalize=v=>v.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
-const additional=[...Object.keys(metadata.artists),'Stray Kids','ENHYPEN','ATEEZ','ITZY','NMIXX','ILLIT','RIIZE','BOYNEXTDOOR','NCT 127','NCT DREAM','NCT WISH','ZEROBASEONE','BABYMONSTER','KISS OF LIFE','STAYC','fromis_9','Kep1er','tripleS','P1Harmony','TREASURE','THE BOYZ','MONSTA X','IU','TAEYEON','TAEMIN','JENNIE','JISOO','LISA','ROSÉ','i-dle','DAY6','Xdinary Heroes','N.Flying','CNBLUE','FTISLAND','BOL4','AKMU','Heize','BIBI','WENDY','TWS','Hearts2Hearts','KATSEYE','PLAVE','KickFlip'];
-const fresh=['IVE','ILLIT','NMIXX','RIIZE','TWICE','BTS','TOMORROW X TOGETHER','LE SSERAFIM','aespa','SEVENTEEN','Stray Kids','ENHYPEN'];
+const additional=[...Object.keys(metadata.artists),'Stray Kids','ENHYPEN','ATEEZ','ITZY','NMIXX','ILLIT','RIIZE','BOYNEXTDOOR','NCT 127','NCT DREAM','NCT WISH','ZEROBASEONE','BABYMONSTER','KISS OF LIFE','STAYC','fromis_9','Kep1er','tripleS','P1Harmony','TREASURE','THE BOYZ','MONSTA X','IU','TAEYEON','TAEMIN','JENNIE','JISOO','LISA','ROSÉ','i-dle','DAY6','Xdinary Heroes','N.Flying','CNBLUE','FTISLAND','BOL4','AKMU','Heize','BIBI','WENDY','TWS','Hearts2Hearts','KATSEYE','PLAVE','KickFlip','Jung Kook','NAYEON','Jimin','j-hope','Jin','RM','Agust D','V','JIHYO','TZUYU','CHAEYOUNG','KEY','ONEW','MINHO','SEULGI','IRENE','JOY','BAEKHYUN','D.O.','KAI','SUHO','CHEN','XIUMIN','YUQI','MINNIE','MIYEON','JEON SOMI','CHUNG HA','SUNMI','KANGDANIEL',...newsEvents.map(event=>event.artist)];
+const fresh=['Jung Kook','NAYEON','AND2BLE','A2O SOUL','A2O LITE','IVE','ILLIT','NMIXX','RIIZE','TWICE','BTS','TOMORROW X TOGETHER','LE SSERAFIM','aespa','SEVENTEEN','Stray Kids','ENHYPEN'];
 await mkdir(new URL('../.sites-runtime/',import.meta.url),{recursive:true});
 const checkpoint=new URL('../.sites-runtime/library-import.json',import.meta.url);
 let state;try{state=JSON.parse(await readFile(checkpoint,'utf8'));}catch{state={tracks:Object.values(metadata.artists).flat(),done:[]};}
 const convert=t=>({trackId:t.trackId,artistId:t.artistId,title:t.trackName,artist:t.artistName,album:t.collectionName,date:t.releaseDate?.slice(0,10),artwork:t.artworkUrl100,preview:t.previewUrl,url:t.trackViewUrl,duration:t.trackTimeMillis,apiGenre:t.primaryGenreName||'K-Pop'});
 const save=()=>writeFile(checkpoint,JSON.stringify(state));
+const acceptedArtist=(source,name)=>normalize(source||'')===normalize(name)||(source||'').split(/&|,/).some(part=>normalize(part)===normalize(name));
 async function fetchData(params){
   await new Promise(r=>setTimeout(r,3200));
   const url=new URL(params.id?'https://itunes.apple.com/lookup':'https://itunes.apple.com/search');url.search=new URLSearchParams({country:'US',media:'music',limit:'200',...params});
@@ -20,17 +22,23 @@ async function fetchData(params){
 }
 for(const artist of additional){
   const key=`songs:${artist}`;if(state.done.includes(key))continue;
-  try{const tracks=(await fetchData({term:artist,entity:'song',attribute:'artistTerm'})).filter(t=>normalize(t.artistName||'')===normalize(artist)&&t.kind==='song');state.tracks.push(...tracks.map(convert));state.done.push(key);await save();console.log(`${artist}: ${tracks.length} songs, 2025–26: ${tracks.filter(t=>t.releaseDate>='2025').length}`);}
+  try{const tracks=(await fetchData({term:artist,entity:'song',attribute:'artistTerm'})).filter(t=>acceptedArtist(t.artistName,artist)&&t.kind==='song');state.tracks.push(...tracks.map(track=>({...convert(track),artist,creditArtist:track.artistName})));state.done.push(key);await save();console.log(`${artist}: ${tracks.length} songs, 2025–26: ${tracks.filter(t=>t.releaseDate>='2025').length}`);}
   catch(error){console.log(`FAILED ${artist}: ${error.message}`);}
 }
 for(const artist of fresh){
   const key=`albums:${artist}`;if(state.done.includes(key))continue;
   try{
-    const albums=(await fetchData({term:artist,entity:'album',attribute:'artistTerm'})).filter(t=>normalize(t.artistName||'')===normalize(artist)&&t.releaseDate>='2025-01-01'&&t.releaseDate<=asOf+'T23:59:59Z'&&!/remix|instrumental|live|karaoke|sped.up|slowed/i.test(t.collectionName)).sort((a,b)=>b.releaseDate.localeCompare(a.releaseDate));
+    const albums=(await fetchData({term:artist,entity:'album',attribute:'artistTerm'})).filter(t=>acceptedArtist(t.artistName,artist)&&t.releaseDate>='2025-01-01'&&t.releaseDate<=asOf+'T23:59:59Z'&&!/remix|instrumental|live|karaoke|sped.up|slowed/i.test(t.collectionName)).sort((a,b)=>b.releaseDate.localeCompare(a.releaseDate));
     const ids=[...new Set(albums.map(a=>a.collectionId))].slice(0,4);
-    if(ids.length){const tracks=(await fetchData({id:ids.join(','),entity:'song'})).filter(t=>t.kind==='song'&&normalize(t.artistName||'')===normalize(artist));state.tracks.push(...tracks.map(convert));console.log(`LATEST ${artist}: ${tracks.length} tracks from ${albums.slice(0,4).map(a=>a.collectionName).join(' / ')}`);}
+    if(ids.length){const tracks=(await fetchData({id:ids.join(','),entity:'song'})).filter(t=>t.kind==='song'&&acceptedArtist(t.artistName,artist));state.tracks.push(...tracks.map(track=>({...convert(track),artist,creditArtist:track.artistName})));console.log(`LATEST ${artist}: ${tracks.length} tracks from ${albums.slice(0,4).map(a=>a.collectionName).join(' / ')}`);}
     state.done.push(key);await save();
   }catch(error){console.log(`FAILED latest ${artist}: ${error.message}`);}
+}
+// Album identity checked against https://music.apple.com/us/album/dreamscape/6818441016
+for(const [artist,albumId] of [['JEONGHAN X JOSHUA','6818441016']]){
+  const key='verified-album:'+albumId;if(state.done.includes(key))continue;
+  const rows=(await fetchData({id:albumId,entity:'song'})).filter(track=>track.kind==='song'&&String(track.collectionId)===albumId);
+  state.tracks.push(...rows.map(track=>({...convert(track),artist,creditArtist:track.artistName})));state.done.push(key);await save();console.log(artist+': '+rows.length+' verified album tracks');
 }
 const canonical=t=>normalize(t.replace(/\s*\([^)]*(?:version|ver\.|remaster)[^)]*\)/gi,''));
 const unique=new Map();
@@ -45,7 +53,7 @@ const displayNames=new Map([...Object.keys(metadata.artists),...additional].map(
 for(const raw of state.tracks){
   const t={...raw,artist:displayNames.get(normalize(raw.artist))||raw.artist};
   if(!t.artistId||String(t.artistId)!==identities[normalize(t.artist)])continue;
-  if(!t.title||!t.artist||!t.date||t.date>asOf||(t.duration&&t.duration<60000)||/instrumental|karaoke|a cappella|acappella|remix|sped.up|slowed|live (?:at|in|from)|\(live|japanese (?:ver|version)|english (?:ver|version)|chinese (?:ver|version)|オルゴール/i.test(`${t.title} ${t.album}`))continue;
+  if(!t.title||!t.artist||!t.date||t.date>asOf||(t.duration&&t.duration<60000)||/instrumental|\(inst\.?\)|voice memo|karaoke|a cappella|acappella|remix|sped.up|slowed|live (?:at|in|from)|\(live|japanese (?:ver|version)|english (?:ver|version)|chinese (?:ver|version)|オルゴール/i.test(`${t.title} ${t.album}`))continue;
   const key=normalize(t.artist)+'|'+canonical(t.title),old=unique.get(key);
   if(!old||t.date<old.date)unique.set(key,{...t,apiGenre:t.apiGenre||'K-Pop'});
 }

@@ -81,8 +81,9 @@ backend/
   taxonomy.js            3개 분류/25개 태그 및 추천 규칙
   editorial.js           기존 수동 큐레이션
   catalog.js             라이브러리 결합, 태그 검색, 통계
-  search-aliases.js       아티스트 59팀의 한글·영문 이름, 약칭, 일부 곡 별칭
+  search-aliases.js       등록 아티스트의 한글·영문 이름, 약칭, 일부 곡 별칭
   discovery.js            한국 기준 현재 연도, 커버 다양성을 고려한 랜덤 정렬
+  media.js                확인한 공식 MV, 음악 채널 링크, 상단 포토카드 후보
   metadata.js            기존 iTunes 메타데이터 캐시
   news-data.js           확인된 기사 일정, 출처, 확인일
   artist-ids.js          MusicBrainz 고유 ID
@@ -136,3 +137,24 @@ node scripts/validate-artifact.mjs
 테스트는 실제 외부 API에 의존하지 않습니다. 라이브러리 최소 크기, 연도별 데이터, 중복, 태그 유효성, 576가지 분위기×장르×상황 교집합, 정렬·검색·페이지, 잘못된 입력, 뉴스 출처, 한국 날짜 우선, 외부 API 장애 시 뉴스 유지 등을 검사합니다.
 
 로컬 실행에는 빌드가 필요 없습니다. 배포 시에도 원본 프론트엔드와 백엔드는 분리되어 있고 빌드 과정에서만 하나의 Worker로 묶입니다.
+
+## 솔로·신인 아티스트와 외부 음악 채널
+
+- 정국, 나연, 지민, 제이홉, 진, RM, Agust D, V, 지효, 쯔위, 채영, 온유, 키, 슬기, 아이린, 백현, 디오, 카이, 수호 등 아이돌 출신 솔로 가수의 실제 API 곡을 보강했습니다.
+- 달력의 A2O SOUL, A2O LITE, AND2BLE, 정한·조슈아 유닛, 성한빈, 리센느 등의 곡도 포함합니다. A2O의 공동 크레딧과 유닛 앨범 표기를 별도로 처리합니다.
+- 첫 화면은 기존처럼 올해 곡을 추천합니다. 연도를 직접 선택하기 전에 검색어를 입력하면 전체 연도로 전환하여, 올해 발매곡이 없는 솔로 가수의 기존 곡도 찾을 수 있게 합니다. 직접 선택한 연도는 유지합니다.
+- 모든 곡에 YouTube MV 검색, YouTube Music 검색, Spotify 검색 링크를 제공합니다. 이들은 검색 결과 링크이며 곡을 자동으로 확정하거나 전체 무료 재생을 보장하는 링크가 아닙니다.
+- 확인한 공식 MV는 카드의 '공식 MV 보기'로 앱 안에서 재생합니다. 현재는 정국 Seven/Standing Next to You, 나연 POP!/ABCD, aespa Whiplash/Supernova, BTS Dynamite/Butter, IVE LOVE DIVE 등 직접 확인한 원본 영상 ID를 등록했습니다.
+- 공식 영상은 YouTube의 iframe으로 표시하고 다운로드하거나 음원을 추출하지 않습니다. 영상은 사용자가 버튼을 누른 후에만 불러옵니다. 닫기/ESC로 창을 닫으면 iframe을 제거해 재생을 중지합니다. 임베딩이 제한된 영상은 YouTube 원문 링크에서 확인할 수 있습니다.
+- API 키 없는 상태에서는 모든 곡의 공식 MV를 자동 검색해 임베드하지 않습니다. YouTube Data API의 자동 검색에는 인증 정보가 필요하고, 과거 iframe 검색 매개변수는 폐지되었습니다. 미등록 곡에는 정확히 'MV 검색'이라고 표시합니다.
+
+공식 문서:
+- https://developers.google.com/youtube/registering_an_application
+- https://developers.google.com/youtube/player_parameters
+
+## 취향 뽑기와 상단 포토카드
+
+- '🎧 PLAYLIST 취향 저격 ♡' 버튼은 선택한 연도의 곡 중 분위기·장르·상황을 하나씩 랜덤 선택합니다. 실제 교집합 결과가 있는 조합을 선택하며 가능하면 10곡 이상인 조합을 우선합니다. 이전 검색어를 비우고 새 태그와 랜덤 곡 목록을 보여줍니다.
+- 상단은 그룹 멤버가 보이는 것으로 확인한 앨범 커버 풀에서 서로 다른 그룹 두 팀을 선택합니다. 페이지를 열 때마다 바뀌고 '포토카드 다시 뽑기'로 다시 바꿀 수 있습니다. 다시 뽑을 때는 현재 두 그룹을 제외합니다. 링크·대체 텍스트·캡션도 새 곡에 맞게 갱신합니다.
+- 상단 이미지도 API가 제공한 앨범 커버이며 Apple Music의 해당 곡 링크를 함께 제공합니다.
+- 새 API: GET /api/surprise?year=current&seed=example, GET /api/hero?seed=example. 이전 그룹을 제외하려면 /api/hero에 exclude를 쉼표로 전달합니다.

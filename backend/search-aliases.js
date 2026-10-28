@@ -1,5 +1,18 @@
 // Names refer only to artists already present in the catalog.
 export const artistAliases={
+  'Jung Kook':['정국','Jungkook'],'NAYEON':['나연'],
+  'Jimin':['지민'],'j-hope':['제이홉'],'Jin':['진'],'RM':['알엠'],
+  'Agust D':['어거스트 디','슈가','SUGA'],'V':['뷔'],
+  'JIHYO':['지효'],'TZUYU':['쯔위'],'CHAEYOUNG':['채영'],
+  'KEY':['키'],'ONEW':['온유'],'MINHO':['민호'],'SEULGI':['슬기'],
+  'IRENE':['아이린'],'JOY':['조이'],'BAEKHYUN':['백현'],'D.O.':['디오','도경수'],
+  'KAI':['카이'],'SUHO':['수호'],'CHEN':['첸'],'XIUMIN':['시우민'],
+  'YUQI':['우기'],'MINNIE':['민니'],'MIYEON':['미연'],
+  'JEON SOMI':['전소미','소미'],'CHUNG HA':['청하'],'SUNMI':['선미'],
+  'KANGDANIEL':['강다니엘'],'Sung Hanbin':['성한빈'],
+  'A2O SOUL':['에이투오 소울','A2O소울'],'A2O LITE':['에이투오 라이트','A2O라이트'],
+  'AND2BLE':['앤더블','앤더블유'],'JEONGHAN X JOSHUA':['정한 조슈아','정한X조슈아'],
+  'RESCENE':['리센느'],
   'ILLIT':['아일릿'],'RIIZE':['라이즈'],'ATEEZ':['에이티즈'],
   'BABYMONSTER':['베이비몬스터','베몬'],'BOL4':['볼빨간사춘기'],
   'LISA':['리사'],'IVE':['아이브'],'Heize':['헤이즈'],
@@ -27,6 +40,8 @@ export const artistAliases={
   'ROSÉ':['로제'],'GFRIEND':['여자친구'],'NewJeans':['뉴진스'],'TREASURE':['트레저']
 };
 export const titleAliases={
+  'Jung Kook|Seven':['세븐'],'Jung Kook|Standing Next to You':['스탠딩 넥스트 투 유'],
+  'NAYEON|POP!':['팝'],'NAYEON|ABCD':['에이비씨디'],
   'aespa|Next Level':['넥스트 레벨'],'aespa|Supernova':['슈퍼노바'],
   'aespa|Whiplash':['위플래시'],'aespa|Dirty Work':['더티 워크'],
   'aespa|Drama':['드라마'],'aespa|Black Mamba':['블랙맘바'],

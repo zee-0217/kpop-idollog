@@ -2,7 +2,8 @@ import { tags, tagGroups, artists, catalog, recommend, libraryStats, itunesArtis
 import {newsCalendar,newsVerifiedAt} from './news-data.js';
 import { metadata } from './metadata.js';
 import { artistIds } from './artist-ids.js';
-import {koreaCurrentYear,discoveryOrder} from './discovery.js';
+import {koreaCurrentYear,discoveryOrder,randomTagMix} from './discovery.js';
+import {officialVideo,listeningLinks,heroPhotos} from './media.js';
 
 const cache = new Map(), pending = new Map();
 const queues = new Map();
@@ -83,7 +84,7 @@ export async function artistTracks(name) {
     url.search = new URLSearchParams({country:'US',media:'music',entity:'song',limit:'200',...(artistId?{id:artistId}:{term:name,attribute:'artistTerm'})});
     const data = await scheduled('itunes', 3100, () => external(url));
     if (!Array.isArray(data.results)) throw new Error('Invalid iTunes response');
-    const tracks = data.results.filter(t => t.kind==='song'&&(artistId?String(t.artistId)===String(artistId):normalize(t.artistName || '')===normalize(name))).map(t => ({
+    const tracks = data.results.filter(t => t.kind==='song'&&(!name.startsWith('A2O ')||normalize(t.artistName||'').includes(normalize(name)))&&(artistId?String(t.artistId)===String(artistId):normalize(t.artistName || '')===normalize(name))).map(t => ({
       title:t.trackName, artist:t.artistName, album:t.collectionName, date:t.releaseDate?.slice(0,10),
       artwork:t.artworkUrl100, preview:t.previewUrl, url:t.trackViewUrl, duration:t.trackTimeMillis
     }));
@@ -96,6 +97,18 @@ export async function handleApi(request) {
   try {
     if (url.pathname === '/api/health') return json({ok:true});
     if (url.pathname === '/api/tags') return json({tags,groups:tagGroups,...libraryStats,counts:Object.fromEntries(tags.map(tag=>[tag,recommend([tag]).length]))});
+    if(url.pathname==='/api/hero'){
+      const seed=(url.searchParams.get('seed')||crypto.randomUUID()).slice(0,128);
+      const exclude=(url.searchParams.get('exclude')||'').slice(0,200).split(',');
+      return json({photos:heroPhotos(catalog,seed,exclude)});
+    }
+    if(url.pathname==='/api/surprise'){
+      const input=url.searchParams.get('year')||'current',year=input==='current'?koreaCurrentYear():input;
+      const seed=(url.searchParams.get('seed')||crypto.randomUUID()).slice(0,128);
+      if(!(['all','recent'].includes(year)||/^20\d{2}$/.test(year)))return json({error:'연도 조건이 올바르지 않습니다.'},400);
+      const mix=randomTagMix(recommend([],{year}),tagGroups,seed);
+      return mix?json({...mix,year,seed}):json({error:'선택한 연도에 추천할 곡이 없어요. 전체 연도로 바꿔 다시 뽑아보세요.'},404);
+    }
     if (url.pathname === '/api/recommendations') {
       const selected=[...new Set((url.searchParams.get('tags')||'').split(',').filter(Boolean))];
       const requestedYear=url.searchParams.get('year')||'current',sort=url.searchParams.get('sort')||'random';
@@ -107,7 +120,7 @@ export async function handleApi(request) {
       if(sort==='random')matching=discoveryOrder(matching,seed);
       else if(sort==='latest')matching.sort((a,b)=>b.date.localeCompare(a.date)||a.artist.localeCompare(b.artist));
       else matching.sort((a,b)=>a[sort].localeCompare(b[sort],'ko')||b.date.localeCompare(a.date));
-      return json({songs:matching.slice(offset,offset+limit),total:matching.length,offset,limit,hasMore:offset+limit<matching.length,selected,enough:matching.length>=10,year,sort,seed,tagSource:'직접 분류 및 제목·장르·아티스트 기반 자동 추정',metadataSource:'iTunes Search API',metadataUpdatedAt:libraryStats.updatedAt});
+      return json({songs:matching.slice(offset,offset+limit).map(song=>({...song,video:officialVideo(song),links:listeningLinks(song)})),total:matching.length,offset,limit,hasMore:offset+limit<matching.length,selected,enough:matching.length>=10,year,sort,seed,tagSource:'직접 분류 및 제목·장르·아티스트 기반 자동 추정',metadataSource:'iTunes Search API',metadataUpdatedAt:libraryStats.updatedAt});
     }
     if(url.pathname==='/api/news'){
       const month=url.searchParams.get('month')||'';

@@ -27,3 +27,17 @@ export function discoveryOrder(songs,seed){
   }
   return ordered;
 }
+export function randomTagMix(songs,groups,seed){
+  const eligible=songs.filter(song=>groups.every(group=>group.tags.some(tag=>song.tags.includes(tag))));
+  if(!eligible.length)return null;
+  const random=seededRandom(seed),candidates=discoveryOrder(eligible,seed);
+  let best=null;
+  for(const song of candidates.slice(0,48)){
+    const selected=groups.map(group=>{const choices=group.tags.filter(tag=>song.tags.includes(tag));return choices[Math.floor(random()*choices.length)];});
+    const total=songs.filter(item=>selected.every(tag=>item.tags.includes(tag))).length;
+    const mix={selected,total};
+    if(!best||mix.total>best.total)best=mix;
+    if(total>=10)return mix;
+  }
+  return best;
+}

@@ -7,6 +7,7 @@ import {newsEvents,newsCalendar} from '../backend/news-data.js';
 import {libraryData} from '../backend/library-data.js';
 import {artistAliases} from '../backend/search-aliases.js';
 import {koreaCurrentYear,coverKey,discoveryOrder} from '../backend/discovery.js';
+import {officialVideo,listeningLinks,heroPhotos} from '../backend/media.js';
 const request=(path,method='GET')=>handleApi(new Request('https://example.test'+path,{method}));
 const data=async path=>(await request(path)).json();
 const norm=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
@@ -49,7 +50,7 @@ test('invalid inputs are rejected',async()=>{
   for(const path of ['/api/calendar?month=2026-13','/api/calendar?month=26-10','/api/news?month=2026-02-01','/api/recommendations?tags=unknown','/api/recommendations?year=bad','/api/recommendations?offset=-1','/api/recommendations?limit=10000','/api/recommendations?sort=bad','/api/recommendations?seed=bad%20seed','/api/artist?name=unknown'])assert.equal((await request(path)).status,400,path);
   assert.equal((await request('/api/nope')).status,404);assert.equal((await request('/api/health','POST')).status,405);
 });
-test('all 59 artists are searchable with their Korean and English names',()=>{
+test('all artists are searchable with their Korean and English names',()=>{
   const ids=query=>recommend([],{q:query}).map(song=>song.id).sort();
   for(const artist of new Set(catalog.map(song=>song.artist))){
     assert.ok(artistAliases[artist]?.length,artist);
@@ -61,6 +62,36 @@ test('all 59 artists are searchable with their Korean and English names',()=>{
   assert.deepEqual(ids('LE SSERAFIM'),ids('르세라핌'));
   assert.ok(recommend([],{q:'에스파 Drama'}).some(song=>song.artist==='aespa'));
   assert.ok(recommend([],{q:'에스파 드라마'}).some(song=>song.artist==='aespa'));
+});
+test('idol soloists and calendar newcomers are included with Korean aliases',()=>{
+  for(const [artist,alias] of [['Jung Kook','정국'],['NAYEON','나연'],['AND2BLE','앤더블'],['A2O SOUL','에이투오 소울'],['A2O LITE','에이투오 라이트'],['JEONGHAN X JOSHUA','정한X조슈아']]){
+    const songs=recommend([],{q:alias});assert.ok(songs.length>0,artist);assert.ok(songs.every(song=>song.artist===artist));
+  }
+});
+test('random taste selects one tag per category and returns matching songs',async()=>{
+  const mixes=new Set();
+  for(let index=0;index<20;index++){
+    const mix=await data('/api/surprise?year=current&seed=mix-'+index);
+    assert.equal(mix.selected.length,3);
+    tagGroups.forEach((group,index)=>assert.ok(group.tags.includes(mix.selected[index])));
+    assert.ok(recommend(mix.selected,{year:mix.year}).length>=1);mixes.add(mix.selected.join(','));
+  }
+  assert.ok(mixes.size>1);
+  assert.equal((await request('/api/surprise?year=bad')).status,400);
+  assert.equal((await request('/api/surprise?year=2099')).status,404);
+});
+test('hero photos use different groups and avoid the current pair when reshuffled',async()=>{
+  const first=heroPhotos(catalog,'first');assert.equal(first.length,2);assert.notEqual(first[0].artist,first[1].artist);
+  const again=await data('/api/hero?'+new URLSearchParams({seed:'second',exclude:first.map(photo=>photo.artist).join(',')}));
+  assert.equal(again.photos.length,2);assert.ok(again.photos.every(photo=>!first.some(old=>old.artist===photo.artist)));
+  for(const photo of again.photos){assert.ok(photo.url.startsWith('https://music.apple.com/'));assert.ok(photo.artwork.startsWith('https://'));}
+});
+test('known official MVs embed by exact title and other songs have truthful search links',async()=>{
+  const pop=officialVideo({artist:'NAYEON',title:'POP!'});assert.equal(pop.id,'f6YDKF0LVWw');
+  assert.equal(officialVideo({artist:'NAYEON',title:'Unknown song'}),null);
+  const links=listeningLinks({artist:'A2O SOUL',title:'SUPERSTAR'});assert.equal(new URL(links.youtube).host,'www.youtube.com');assert.equal(new URL(links.youtubeMusic).host,'music.youtube.com');assert.equal(new URL(links.spotify).host,'open.spotify.com');
+  const nayeon=await data('/api/recommendations?year=all&q='+encodeURIComponent('나연'));
+  assert.ok(nayeon.songs.some(song=>song.video?.id==='f6YDKF0LVWw'));assert.ok(nayeon.songs.every(song=>song.links.youtube&&song.links.spotify));
 });
 test('default is random current-year discovery with diverse covers and stable pagination',async()=>{
   const first=await data('/api/recommendations?seed=stable-test&limit=20');

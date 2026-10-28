@@ -6,6 +6,7 @@ let month = today.slice(0,7), selectedDate = today, events = [], calendarData = 
 let tagGroups = [], tagCounts = {}, selectedTags = new Set(), songs = [], hasMore = false, totalSongs = 0;
 let searchTimer, loadingMore = false, calendarLoading = true;
 let discoverySeed=crypto.randomUUID();
+let automaticYear=true, heroRequest=0;
 let calendarRequest = 0, recommendationRequest = 0, toastTimer;
 const refreshedArtists = new Map();
 let artistSlots = 0;
@@ -105,6 +106,10 @@ function songCard(song,index) {
   const play=text('button','▶','play-button');play.type='button';play.setAttribute('aria-label',`${song.artist} ${song.title} 미리듣기`);play.addEventListener('click',()=>playSong(song,play));cover.append(play);card.append(cover,text('h4',song.title),text('p',song.artist,'song-artist'));
   const labels=document.createElement('div');labels.className='song-tags';const shown=[...new Set([...song.tags.filter(tag=>selectedTags.has(tag)),...song.tags])];shown.slice(0,5).forEach(tag=>labels.append(text('span','#'+tag,selectedTags.has(tag)?'match':'')));if(shown.length>5){const more=text('span','+'+(shown.length-5));more.title=shown.slice(5).map(tag=>'#'+tag).join(' ');labels.append(more);}card.append(labels);
   addLink(card,song.url?'Apple Music에서 듣기 ↗':'Apple Music에서 찾기 ↗',song.url||`https://music.apple.com/us/search?term=${encodeURIComponent(`${song.artist} ${song.title}`)}`,'song-link');
+  const media=document.createElement('div');media.className='song-media';
+  if(song.video){const button=text('button','▶ 공식 MV 보기','mv-button');button.type='button';button.addEventListener('click',()=>openMV(song));media.append(button);}
+  const channels=document.createElement('details');channels.className='listen-channels';channels.append(text('summary','다른 채널에서 듣기 ↗'));const links=document.createElement('div');
+  if(song.links){addLink(links,'YouTube MV 검색 ↗',song.links.youtube);addLink(links,'YouTube Music ↗',song.links.youtubeMusic);addLink(links,'Spotify 검색 ↗',song.links.spotify);}channels.append(links);media.append(channels);card.append(media);
   card.append(text('p',song.date?song.date+' · iTunes':'발매일 확인 중','song-meta'));const method=text('span',song.tagMethod==='curated'?'직접 분류':song.tagMethod==='mixed'?'직접 + 추천 분류':'추천 태그 · 추정','tag-method');method.title=song.tagMethod==='curated'?'편집자가 곡별로 분류한 태그입니다.':'제목·API 장르·아티스트 스타일을 바탕으로 추정했습니다. 음원 분석 결과가 아니며 실제 느낌과 다를 수 있습니다.';card.append(method);return card;
 }
 function renderSongs(){
@@ -134,12 +139,50 @@ async function playSong(song,button) {
     $('#player-title').textContent=song.title;$('#player-artist').textContent=`${song.artist} · iTunes 미리듣기`;$('#audio').src=safeURL(song.preview);$('#player').hidden=false;await $('#audio').play();
   }catch{showToast('미리듣기를 불러오지 못했어요. 아래 Apple Music 링크를 이용해 주세요.');}finally{button.disabled=false;}
 }
-$('#sort-songs').addEventListener('change',()=>{if($('#sort-songs').value==='random')discoverySeed=crypto.randomUUID();loadSongs();});$('#year-filter').addEventListener('change',()=>loadSongs());$('#song-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadSongs(),250);});$('#load-more').addEventListener('click',()=>{if(!loadingMore)loadSongs(true);});$('#close-player').addEventListener('click',()=>{$('#audio').pause();$('#audio').removeAttribute('src');$('#audio').load();$('#player').hidden=true;});
+$('#sort-songs').addEventListener('change',()=>{if($('#sort-songs').value==='random')discoverySeed=crypto.randomUUID();loadSongs();});$('#year-filter').addEventListener('change',()=>{automaticYear=false;loadSongs();});$('#song-search').addEventListener('input',()=>{clearTimeout(searchTimer);if(automaticYear&&$('#song-search').value.trim()){automaticYear=false;$('#year-filter').value='all';}searchTimer=setTimeout(()=>loadSongs(),250);});$('#load-more').addEventListener('click',()=>{if(!loadingMore)loadSongs(true);});$('#close-player').addEventListener('click',()=>{$('#audio').pause();$('#audio').removeAttribute('src');$('#audio').load();$('#player').hidden=true;});
 $('#audio').addEventListener('error',()=>showToast('미리듣기 파일을 재생하지 못했어요. Apple Music에서 확인해 주세요.'));
 async function init(){
   const currentYear=today.slice(0,4);$('#year-filter').querySelector('[value=current]').textContent=currentYear+'년 (올해)';$('#year-filter').querySelector('[value="'+currentYear+'"]')?.remove();
-  loadCalendar();
+  loadCalendar();refreshHero();
   try{const data=await api('/api/tags');tagGroups=data.groups;tagCounts=data.counts;renderTags();loadSongs();}
   catch(error){$('#recommendation-summary').textContent=error.message;const retry=text('button','다시 불러오기','text-button');retry.addEventListener('click',()=>{retry.remove();init();});$('#tag-options').append(retry);}
 }
+function closeMV(){ $('#mv-embed').replaceChildren();$('#mv-dialog').close(); }
+function openMV(song){
+  if(!song.video||!/^[a-zA-Z0-9_-]{11}$/.test(song.video.id))return;
+  $('#audio').pause();$('#mv-title').textContent=song.artist+' · '+song.title;
+  $('#mv-channel').textContent=song.video.channel+' · 공식 업로드';
+  $('#mv-external').href='https://www.youtube.com/watch?v='+song.video.id;
+  const frame=document.createElement('iframe');frame.src='https://www.youtube-nocookie.com/embed/'+song.video.id+'?autoplay=1&rel=0';frame.title=song.artist+' '+song.title+' 공식 뮤직비디오';frame.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';frame.allowFullscreen=true;frame.referrerPolicy='strict-origin-when-cross-origin';
+  $('#mv-embed').replaceChildren(frame);$('#mv-dialog').showModal();
+}
+$('#close-mv').addEventListener('click',closeMV);
+$('#mv-dialog').addEventListener('cancel',()=>$('#mv-embed').replaceChildren());
+$('#mv-dialog').addEventListener('click',event=>{if(event.target===$('#mv-dialog')){const rect=event.target.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeMV();}});
+async function refreshHero(){
+  const version=++heroRequest,button=$('#shuffle-hero');button.disabled=true;button.setAttribute('aria-busy','true');
+  try{
+    const exclude=[...document.querySelectorAll('.photocard')].map(card=>card.dataset.artist).filter(Boolean).join(',');
+    const data=await api('/api/hero?'+new URLSearchParams({seed:crypto.randomUUID(),exclude}));
+    await Promise.all(data.photos.map(photo=>new Promise((resolve,reject)=>{const img=new Image(),timer=setTimeout(()=>reject(new Error('Image timeout')),12000);img.onload=()=>{clearTimeout(timer);resolve();};img.onerror=()=>{clearTimeout(timer);reject(new Error('Image failed'));};img.src=safeURL(photo.artwork);})));if(version!==heroRequest)return;
+    for(const [index,photo] of data.photos.entries()){
+      const card=document.querySelectorAll('.photocard')[index];if(!card)continue;
+      card.href=safeURL(photo.url);card.dataset.artist=photo.artist;card.setAttribute('aria-label',photo.artist+' '+photo.title+' Apple Music에서 듣기');card.querySelector('img').src=safeURL(photo.artwork);card.querySelector('img').alt=photo.artist+' '+photo.album+' 앨범 커버';card.querySelector('.photo-caption small').textContent=photo.artist+' · '+photo.title+' ↗';
+    }
+  }catch{if(version===heroRequest)showToast('포토카드를 불러오지 못했어요. 잠시 후 다시 뽑아주세요.');}
+  finally{if(version===heroRequest){button.disabled=false;button.removeAttribute('aria-busy');}}
+}
+$('#shuffle-hero').addEventListener('click',refreshHero);
+$('#surprise-playlist').addEventListener('click',async()=>{
+  const button=$('#surprise-playlist');button.disabled=true;button.setAttribute('aria-busy','true');
+  try{
+    const seed=crypto.randomUUID(),year=$('#year-filter').value,version=recommendationRequest;
+    const data=await api('/api/surprise?'+new URLSearchParams({year,seed}));
+    if($('#year-filter').value!==year||version!==recommendationRequest)return;
+    clearTimeout(searchTimer);$('#song-search').value='';selectedTags=new Set(data.selected);discoverySeed=seed;$('#sort-songs').value='random';renderTags();await loadSongs();
+    showToast('오늘의 취향 뽑기! '+data.selected.map(tag=>'#'+tag).join(' '));
+    $('#recommendation-summary').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});
+  }catch(error){showToast(error.message);}
+  finally{button.disabled=false;button.removeAttribute('aria-busy');}
+});
 init();
