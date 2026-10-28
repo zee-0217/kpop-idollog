@@ -4,7 +4,7 @@ HTML, CSS, 브라우저 JavaScript와 Node.js 기본 모듈로 만든 K-pop 컴�
 
 ## 실행 순서
 
-1. Node.js 22 이상을 설치하고 `node --version`으로 확인합니다.
+1. Node.js 22.x를 설치하고 `node --version`으로 확인합니다.
 2. PowerShell에서 프로젝트 폴더로 이동합니다.
 
 ```powershell
@@ -131,7 +131,7 @@ node scripts/import-library.mjs
 ## 검증과 배포 번들
 
 ```powershell
-node --test tests/api.test.js
+node --test tests/*.test.js
 node scripts/build.mjs
 node scripts/validate-artifact.mjs
 ```
@@ -139,6 +139,30 @@ node scripts/validate-artifact.mjs
 테스트는 실제 외부 API에 의존하지 않습니다. 라이브러리 최소 크기, 연도별 데이터, 중복, 태그 유효성, 576가지 분위기×장르×상황 교집합, 정렬·검색·페이지, 잘못된 입력, 뉴스 출처, 한국 날짜 우선, 외부 API 장애 시 뉴스 유지 등을 검사합니다.
 
 로컬 실행에는 빌드가 필요 없습니다. 배포 시에도 원본 프론트엔드와 백엔드는 분리되어 있고 빌드 과정에서만 하나의 Worker로 묶입니다.
+
+## Vercel 배포
+
+GitHub 저장소 `zee-0217/kpop-idollog`를 Vercel 프로젝트에 연결합니다. 저장소 루트의 `vercel.json`이 다음 설정을 지정합니다.
+
+| 설정 | 값 |
+| --- | --- |
+| Framework Preset | Other |
+| Root Directory | 저장소 루트 (`.` 또는 비워 두기) |
+| Build Command | `npm run build:vercel` |
+| Output Directory | `public` |
+| Node.js | `22.x` |
+| 환경 변수 / API 키 | 필요 없음 |
+
+빌드는 `frontend/`의 HTML·CSS·JavaScript만 `public/`에 복사합니다. `/api/*`는 `api/index.js`의 단일 Vercel Function을 통해 기존 `backend/api.js`로 전달됩니다. 검색어·태그·연도 등의 쿼리도 유지합니다. 카탈로그·MV 데이터는 서버 측 모듈에 포함되며 정적 파일로 공개하지 않습니다. 외부 API 조회에 사용할 함수 실행 한도는 60초입니다. 캐시는 함수 인스턴스별 메모리에 저장되므로 재시작 시 초기화됩니다.
+
+저장소에 push하면 연결된 Vercel 프로젝트에서 자동으로 새 배포를 시작합니다. 이전 배포를 Redeploy하면 예전 커밋이 다시 사용될 수 있으므로 최신 커밋으로 생성된 배포를 확인하세요. 기존 프로젝트에 별도 Build Command/Output Directory 설정이 있다면 위 값으로 맞추거나 Override를 해제하세요.
+
+```powershell
+node scripts/build-vercel.mjs
+node --test tests/*.test.js
+```
+
+`STATIC_BUILD_NO_OUT_DIR`는 위 정적 출력 폴더가 없어서 발생한 오류입니다. `npm warn Unknown env config "cache-dir"`는 Vercel의 npm 환경 경고이며 이 오류의 원인은 아닙니다. `npm run build`는 기존 Sites Worker용 빌드로 유지하고 Vercel에서는 `vercel.json`에 지정한 별도 명령을 사용합니다.
 
 ## 솔로·신인 아티스트와 외부 음악 채널
 
