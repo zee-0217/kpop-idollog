@@ -10,6 +10,7 @@ import {koreaCurrentYear,coverKey,discoveryOrder} from '../backend/discovery.js'
 import {officialVideo,listeningLinks,heroPhotos} from '../backend/media.js';
 import {mvMatchesSong,parseOfficialMVTitle} from '../backend/mv-matching.js';
 import {auditedMVs} from '../backend/mv-data.js';
+import {heroPhotoPool} from '../backend/hero-data.js';
 const request=(path,method='GET')=>handleApi(new Request('https://example.test'+path,{method}));
 const data=async path=>(await request(path)).json();
 const norm=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
@@ -117,6 +118,23 @@ test('hero photos use different groups and avoid the current pair when reshuffle
   const again=await data('/api/hero?'+new URLSearchParams({seed:'second',exclude:first.map(photo=>photo.artist).join(',')}));
   assert.equal(again.photos.length,2);assert.ok(again.photos.every(photo=>!first.some(old=>old.artist===photo.artist)));
   for(const photo of again.photos){assert.ok(photo.url.startsWith('https://music.apple.com/'));assert.ok(photo.artwork.startsWith('https://'));}
+});
+
+test('hero pool covers many groups, rotates across covers, and respects recent history',()=>{
+  assert.ok(heroPhotoPool.length>=45);assert.ok(new Set(heroPhotoPool.map(photo=>photo.artist)).size>=25);
+  const seen=new Set(),covers=new Set();let recent=[];
+  for(let index=0;index<200;index++){
+    const photos=heroPhotos(catalog,'hero-rotation-'+index,recent);
+    assert.equal(photos.length,2);assert.notEqual(photos[0].artist,photos[1].artist);
+    for(const photo of photos){
+      assert.ok(!recent.includes(photo.artist));seen.add(photo.artist);covers.add(photo.artwork);
+      assert.ok(catalog.some(song=>song.artist===photo.artist&&song.title===photo.title));
+      assert.ok(photo.url.startsWith('https://music.apple.com/'));assert.ok(photo.artwork.endsWith('/400x400bb.jpg'));
+    }
+    recent=[...recent,...photos.map(photo=>photo.artist)].slice(-12);
+  }
+  assert.ok(seen.size>=25);assert.ok(covers.size>=45);
+  assert.deepEqual(heroPhotos(catalog,'stable-hero'),heroPhotos(catalog,'stable-hero'));
 });
 test('known official MVs embed by exact title and other songs have truthful search links',async()=>{
   const pop=officialVideo({artist:'NAYEON',title:'POP!'});assert.equal(pop.id,'f6YDKF0LVWw');

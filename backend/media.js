@@ -1,5 +1,6 @@
 import {discoveryOrder} from './discovery.js';
 import {auditedMVs} from './mv-data.js';
+import {heroPhotoPool} from './hero-data.js';
 import {mvArtistName,mvVersion,mvTitleKeys,mvSongKeys} from './mv-matching.js';
 // Official uploads verified against their original YouTube pages.
 // A video ID is embedded only for a known artist/title pair, never guessed.
@@ -39,15 +40,11 @@ export function listeningLinks(song){
     spotify:'https://open.spotify.com/search/'+encodeURIComponent(query)
   };
 }
-const heroChoices=[
-  ['aespa','Dreams Come True'],['ILLIT','You’re Under Arrest'],
-  ['TWICE','FANCY'],['TWICE','What is Love?'],['GFRIEND','Rough'],['GFRIEND','Time for the moon night'],
-  ['Red Velvet','RBB (Really Bad Boy)']
-];
 export function heroPhotos(catalog,seed,exclude=[]){
-  const candidates=heroChoices.map(([artist,title])=>catalog.find(song=>mediaNormalize(song.artist)===mediaNormalize(artist)&&mediaNormalize(song.title).endsWith(mediaNormalize(title)))).filter(song=>song?.artwork);
-  const available=candidates.filter(song=>!exclude.includes(song.artist));
-  const shuffled=discoveryOrder(available.length>=2?available:candidates,seed),chosen=[];
-  for(const song of shuffled){if(chosen.some(item=>item.artist===song.artist))continue;chosen.push({artist:song.artist,title:song.title,album:song.album,artwork:song.artwork.replace('/100x100bb.jpg','/400x400bb.jpg'),url:song.url});if(chosen.length===2)break;}
-  return chosen;
+  const artists=new Map();
+  for(const photo of heroPhotoPool){if(!artists.has(photo.artist))artists.set(photo.artist,[]);artists.get(photo.artist).push(photo);}
+  // Choose artists first so groups with more covers do not dominate the draw.
+  const candidates=[...artists].map(([artist,photos])=>discoveryOrder(photos,seed+'|'+artist)[0]);
+  const available=candidates.filter(photo=>!exclude.includes(photo.artist));
+  return discoveryOrder(available.length>=2?available:candidates,seed).slice(0,2);
 }

@@ -162,13 +162,24 @@ $('#mv-dialog').addEventListener('click',event=>{if(event.target===$('#mv-dialog
 async function refreshHero(){
   const version=++heroRequest,button=$('#shuffle-hero');button.disabled=true;button.setAttribute('aria-busy','true');
   try{
-    const exclude=[...document.querySelectorAll('.photocard')].map(card=>card.dataset.artist).filter(Boolean).join(',');
+    let recent=[];try{recent=JSON.parse(sessionStorage.getItem('idollog-hero-history')||'[]');if(!Array.isArray(recent))recent=[];}catch{}
+    const cards=[...document.querySelectorAll('.photocard')];
+    const exclude=[...new Set([...cards.map(card=>card.dataset.artist),...recent.slice(-12)])].filter(value=>typeof value==='string'&&value).join(',');
     const data=await api('/api/hero?'+new URLSearchParams({seed:crypto.randomUUID(),exclude}));
-    await Promise.all(data.photos.map(photo=>new Promise((resolve,reject)=>{const img=new Image(),timer=setTimeout(()=>reject(new Error('Image timeout')),12000);img.onload=()=>{clearTimeout(timer);resolve();};img.onerror=()=>{clearTimeout(timer);reject(new Error('Image failed'));};img.src=safeURL(photo.artwork);})));if(version!==heroRequest)return;
+    if(data.photos.length!==cards.length)throw new Error('Incomplete photo pair');
+    const images=await Promise.all(data.photos.map(photo=>new Promise((resolve,reject)=>{
+      const img=new Image(400,400),timer=setTimeout(()=>reject(new Error('Image timeout')),12000);
+      img.decoding='async';img.fetchPriority='high';img.alt=photo.artist+' '+photo.album+' 앨범 커버';
+      img.onload=async()=>{try{await img.decode();resolve(img);}catch(error){reject(error);}finally{clearTimeout(timer);}};
+      img.onerror=()=>{clearTimeout(timer);reject(new Error('Image failed'));};img.src=safeURL(photo.artwork);
+    })));
+    if(version!==heroRequest)return;
+    // Swap already-decoded elements together, keeping the old pair until ready.
     for(const [index,photo] of data.photos.entries()){
-      const card=document.querySelectorAll('.photocard')[index];if(!card)continue;
-      card.href=safeURL(photo.url);card.dataset.artist=photo.artist;card.setAttribute('aria-label',photo.artist+' '+photo.title+' Apple Music에서 듣기');card.querySelector('img').src=safeURL(photo.artwork);card.querySelector('img').alt=photo.artist+' '+photo.album+' 앨범 커버';card.querySelector('.photo-caption small').textContent=photo.artist+' · '+photo.title+' ↗';
+      const card=cards[index];
+      card.querySelector('img').replaceWith(images[index]);card.href=safeURL(photo.url);card.dataset.artist=photo.artist;card.removeAttribute('aria-disabled');card.setAttribute('aria-label',photo.artist+' '+photo.title+' Apple Music에서 듣기');card.querySelector('.photo-caption small').textContent=photo.artist+' · '+photo.title+' ↗';card.classList.add('is-ready');
     }
+    try{sessionStorage.setItem('idollog-hero-history',JSON.stringify([...recent,...data.photos.map(photo=>photo.artist)].slice(-12)));}catch{}
   }catch{if(version===heroRequest)showToast('포토카드를 불러오지 못했어요. 잠시 후 다시 뽑아주세요.');}
   finally{if(version===heroRequest){button.disabled=false;button.removeAttribute('aria-busy');}}
 }

@@ -3,7 +3,7 @@ import {readFile, mkdir, writeFile, copyFile} from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const read = p => readFile(new URL(p, root),'utf8');
 const modules=[];
-for(const file of ['backend/metadata.js','backend/library-data.js','backend/taxonomy.js','backend/editorial.js','backend/search-aliases.js','backend/discovery.js','backend/mv-matching.js','backend/mv-data.js','backend/media.js','backend/catalog.js','backend/artist-ids.js','backend/news-data.js','backend/api.js']){
+for(const file of ['backend/metadata.js','backend/library-data.js','backend/taxonomy.js','backend/editorial.js','backend/search-aliases.js','backend/discovery.js','backend/mv-matching.js','backend/mv-data.js','backend/hero-data.js','backend/media.js','backend/catalog.js','backend/artist-ids.js','backend/news-data.js','backend/api.js']){
   modules.push((await read(file)).replace(/^\uFEFF/,'').replace(/^import .*?;\r?\n/gm,'').replace(/^export \{[^}]*\};?\r?\n/gm,''));
 }
 const assets = {};

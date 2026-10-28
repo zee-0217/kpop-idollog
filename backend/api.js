@@ -99,7 +99,7 @@ export async function handleApi(request) {
     if (url.pathname === '/api/tags') return json({tags,groups:tagGroups,...libraryStats,counts:Object.fromEntries(tags.map(tag=>[tag,recommend([tag]).length]))});
     if(url.pathname==='/api/hero'){
       const seed=(url.searchParams.get('seed')||crypto.randomUUID()).slice(0,128);
-      const exclude=(url.searchParams.get('exclude')||'').slice(0,200).split(',');
+      const exclude=(url.searchParams.get('exclude')||'').slice(0,1000).split(',');
       return json({photos:heroPhotos(catalog,seed,exclude)});
     }
     if(url.pathname==='/api/surprise'){
