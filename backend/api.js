@@ -2,6 +2,7 @@ import { tags, tagGroups, artists, catalog, recommend, libraryStats, itunesArtis
 import {newsCalendar,newsVerifiedAt} from './news-data.js';
 import { metadata } from './metadata.js';
 import { artistIds } from './artist-ids.js';
+import {koreaCurrentYear,discoveryOrder} from './discovery.js';
 
 const cache = new Map(), pending = new Map();
 const queues = new Map();
@@ -97,13 +98,16 @@ export async function handleApi(request) {
     if (url.pathname === '/api/tags') return json({tags,groups:tagGroups,...libraryStats,counts:Object.fromEntries(tags.map(tag=>[tag,recommend([tag]).length]))});
     if (url.pathname === '/api/recommendations') {
       const selected=[...new Set((url.searchParams.get('tags')||'').split(',').filter(Boolean))];
-      const year=url.searchParams.get('year')||'all',sort=url.searchParams.get('sort')||'latest';
+      const requestedYear=url.searchParams.get('year')||'current',sort=url.searchParams.get('sort')||'random';
+      const year=requestedYear==='current'?koreaCurrentYear():requestedYear;
+      const seed=url.searchParams.get('seed')||crypto.randomUUID();
       const offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||20);
-      if(selected.some(tag=>!tags.includes(tag))||!['all','recent','2025','2026'].includes(year)||!['latest','title','artist'].includes(sort)||!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>100)return json({error:'태그, 연도, 정렬 또는 페이지 값이 올바르지 않습니다.'},400);
-      const matching=recommend(selected,{year,q:(url.searchParams.get('q')||'').slice(0,150)});
-      if(sort==='latest')matching.sort((a,b)=>b.date.localeCompare(a.date)||a.artist.localeCompare(b.artist));
+      if(selected.some(tag=>!tags.includes(tag))||!(['all','recent'].includes(year)||/^20\d{2}$/.test(year))||!['random','latest','title','artist'].includes(sort)||!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>100||!/^[a-zA-Z0-9_-]{1,128}$/.test(seed))return json({error:'태그, 연도, 정렬 또는 페이지 값이 올바르지 않습니다.'},400);
+      let matching=recommend(selected,{year,q:(url.searchParams.get('q')||'').slice(0,150)});
+      if(sort==='random')matching=discoveryOrder(matching,seed);
+      else if(sort==='latest')matching.sort((a,b)=>b.date.localeCompare(a.date)||a.artist.localeCompare(b.artist));
       else matching.sort((a,b)=>a[sort].localeCompare(b[sort],'ko')||b.date.localeCompare(a.date));
-      return json({songs:matching.slice(offset,offset+limit),total:matching.length,offset,limit,hasMore:offset+limit<matching.length,selected,enough:matching.length>=10,year,tagSource:'직접 분류 및 제목·장르·아티스트 기반 자동 추정',metadataSource:'iTunes Search API',metadataUpdatedAt:libraryStats.updatedAt});
+      return json({songs:matching.slice(offset,offset+limit),total:matching.length,offset,limit,hasMore:offset+limit<matching.length,selected,enough:matching.length>=10,year,sort,seed,tagSource:'직접 분류 및 제목·장르·아티스트 기반 자동 추정',metadataSource:'iTunes Search API',metadataUpdatedAt:libraryStats.updatedAt});
     }
     if(url.pathname==='/api/news'){
       const month=url.searchParams.get('month')||'';

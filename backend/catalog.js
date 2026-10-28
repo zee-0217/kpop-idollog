@@ -2,6 +2,7 @@
 import {editorialCatalog} from './editorial.js';
 import {metadata} from './metadata.js';
 import {tagGroups,tags,classify} from './taxonomy.js';
+import {normalizeSearch,searchTextFor,resolveArtistQuery} from './search-aliases.js';
 export {tagGroups,tags};
 const canonical=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 const editorialByArtist=new Map();
@@ -19,8 +20,10 @@ for(const old of editorialCatalog){
 export const catalog=tracks.sort((a,b)=>b.date.localeCompare(a.date)||a.artist.localeCompare(b.artist)).map((song,index)=>({...song,id:`song-${index}`}));
 export const artists=[...new Set(catalog.map(song=>song.artist))];
 export const itunesArtistIds=libraryData.artistIds;
+const searchIndex=new Map(catalog.map(song=>[song.id,searchTextFor(song)]));
 export const libraryStats={total:catalog.length,artists:artists.length,recent:catalog.filter(song=>song.date>='2025-01-01').length,year2025:catalog.filter(song=>song.date.startsWith('2025')).length,year2026:catalog.filter(song=>song.date.startsWith('2026')).length,updatedAt:libraryData.updatedAt};
 export function recommend(selected,{year='all',q=''}={}){
-  const query=q.trim().toLowerCase();
-  return catalog.filter(song=>selected.every(tag=>song.tags.includes(tag))&&(year==='all'||(year==='recent'?song.date>='2025-01-01':song.date.startsWith(year)))&&(!query||`${song.title} ${song.artist} ${song.album}`.toLowerCase().includes(query)));
+  const terms=q.trim().split(/\s+/).map(normalizeSearch).filter(Boolean);
+  const exactArtist=resolveArtistQuery(q);
+  return catalog.filter(song=>selected.every(tag=>song.tags.includes(tag))&&(year==='all'||(year==='recent'?song.date>='2025-01-01':song.date.startsWith(year)))&&(exactArtist?song.artist===exactArtist:terms.every(term=>searchIndex.get(song.id).includes(term))));
 }

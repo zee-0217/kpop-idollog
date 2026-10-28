@@ -5,6 +5,8 @@ import {tags,tagGroups,catalog,recommend,libraryStats} from '../backend/catalog.
 import {artistIds} from '../backend/artist-ids.js';
 import {newsEvents,newsCalendar} from '../backend/news-data.js';
 import {libraryData} from '../backend/library-data.js';
+import {artistAliases} from '../backend/search-aliases.js';
+import {koreaCurrentYear,coverKey,discoveryOrder} from '../backend/discovery.js';
 const request=(path,method='GET')=>handleApi(new Request('https://example.test'+path,{method}));
 const data=async path=>(await request(path)).json();
 const norm=value=>value.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
@@ -44,8 +46,45 @@ test('API handles grouped tags, duplicate tags, year filters, queries, sorting a
   const sorted=await data('/api/recommendations?sort=title&limit=100');assert.ok(sorted.songs.every((song,i)=>i===0||sorted.songs[i-1].title.localeCompare(song.title,'ko')<=0));
 });
 test('invalid inputs are rejected',async()=>{
-  for(const path of ['/api/calendar?month=2026-13','/api/calendar?month=26-10','/api/news?month=2026-02-01','/api/recommendations?tags=unknown','/api/recommendations?year=2027','/api/recommendations?offset=-1','/api/recommendations?limit=10000','/api/recommendations?sort=bad','/api/artist?name=unknown'])assert.equal((await request(path)).status,400,path);
+  for(const path of ['/api/calendar?month=2026-13','/api/calendar?month=26-10','/api/news?month=2026-02-01','/api/recommendations?tags=unknown','/api/recommendations?year=bad','/api/recommendations?offset=-1','/api/recommendations?limit=10000','/api/recommendations?sort=bad','/api/recommendations?seed=bad%20seed','/api/artist?name=unknown'])assert.equal((await request(path)).status,400,path);
   assert.equal((await request('/api/nope')).status,404);assert.equal((await request('/api/health','POST')).status,405);
+});
+test('all 59 artists are searchable with their Korean and English names',()=>{
+  const ids=query=>recommend([],{q:query}).map(song=>song.id).sort();
+  for(const artist of new Set(catalog.map(song=>song.artist))){
+    assert.ok(artistAliases[artist]?.length,artist);
+    assert.deepEqual(ids(artist),ids(artistAliases[artist][0]),artist);
+  }
+  assert.deepEqual(ids('aespa'),ids('에스파'));
+  assert.deepEqual(ids('NCT DREAM'),ids('엔시티드림'));
+  assert.deepEqual(ids('TOMORROW X TOGETHER'),ids('투바투'));
+  assert.deepEqual(ids('LE SSERAFIM'),ids('르세라핌'));
+  assert.ok(recommend([],{q:'에스파 Drama'}).some(song=>song.artist==='aespa'));
+  assert.ok(recommend([],{q:'에스파 드라마'}).some(song=>song.artist==='aespa'));
+});
+test('default is random current-year discovery with diverse covers and stable pagination',async()=>{
+  const first=await data('/api/recommendations?seed=stable-test&limit=20');
+  assert.equal(first.sort,'random');assert.equal(first.year,koreaCurrentYear());
+  assert.equal(first.songs.length,20);assert.ok(first.songs.every(song=>song.date.startsWith(koreaCurrentYear())));
+  assert.equal(new Set(first.songs.map(coverKey)).size,20);
+  const repeat=await data('/api/recommendations?seed=stable-test&limit=20');
+  assert.deepEqual(first.songs.map(song=>song.id),repeat.songs.map(song=>song.id));
+  const second=await data('/api/recommendations?seed=stable-test&offset=20&limit=20');
+  assert.ok(second.songs.every(song=>!first.songs.some(old=>old.id===song.id)));
+  const combined=await data('/api/recommendations?seed=stable-test&limit=40');
+  assert.deepEqual([...first.songs,...second.songs].map(song=>song.id),combined.songs.map(song=>song.id));
+  const other=await data('/api/recommendations?seed=other-test&limit=20');
+  assert.notDeepEqual(first.songs.map(song=>song.id),other.songs.map(song=>song.id));
+});
+test('cover balancing keeps every matching song and explicit sorting/years override defaults',async()=>{
+  const sample=Array.from({length:12},(_,index)=>({id:String(index),artist:'artist',album:'album-'+index%3,artwork:`https://is${index%2}.example.test/image/album-${index%3}/100x100bb.jpg`}));
+  const ordered=discoveryOrder(sample,'sample');assert.equal(new Set(ordered.map(song=>song.id)).size,12);
+  for(let offset=0;offset<12;offset+=3)assert.equal(new Set(ordered.slice(offset,offset+3).map(coverKey)).size,3);
+  const all=await data('/api/recommendations?year=all&sort=latest');assert.equal(all.total,catalog.length);
+  assert.ok(all.songs.every((song,index)=>index===0||all.songs[index-1].date>=song.date));
+  const korean=await data('/api/recommendations?year=all&q='+encodeURIComponent('에스파')+'&sort=title&limit=100');
+  const english=await data('/api/recommendations?year=all&q=aespa&sort=title&limit=100');
+  assert.deepEqual(korean.songs,english.songs);assert.equal(korean.total,english.total);
 });
 test('news facts include dated 2026 sources and are available without external fetches',async t=>{
   t.mock.method(globalThis,'fetch',async()=>{throw new Error('network unavailable');});
